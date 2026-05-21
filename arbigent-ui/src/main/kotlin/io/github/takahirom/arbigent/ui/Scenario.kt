@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
@@ -12,6 +13,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.onClick
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.input.rememberTextFieldState
@@ -58,7 +60,6 @@ import org.jetbrains.jewel.ui.component.styling.LocalGroupHeaderStyle
 import org.jetbrains.jewel.ui.icons.AllIconsKeys
 import org.jetbrains.jewel.ui.painter.hints.Size
 import org.jetbrains.jewel.ui.theme.colorPalette
-import java.awt.Desktop
 import java.io.File
 import java.io.FileInputStream
 
@@ -80,139 +81,170 @@ fun Scenario(
   getFixedScenarioById: (String) -> FixedScenario? = { null },
   mcpServerNames: List<String> = emptyList(),
 ) {
+  val colors = LocalPremiumColors.current
+  val typography = LocalPremiumTypography.current
   val arbigentScenarioExecutor: ArbigentScenarioExecutor? by scenarioStateHolder.arbigentScenarioExecutorStateFlow.collectAsState()
   val scenarioType by scenarioStateHolder.scenarioTypeStateFlow.collectAsState()
+  val isRunning by scenarioStateHolder.isRunning.collectAsState()
+  val isAchieved by scenarioStateHolder.isAchieved.collectAsState()
   val goal = scenarioStateHolder.goalState
-  var goalTextAreaHeight by remember { mutableStateOf(48.dp) }
+  var goalTextAreaHeight by remember { mutableStateOf(96.dp) }
+  var removeDialogShowing by remember { mutableStateOf(false) }
   Column(
-    modifier = Modifier.padding(8.dp)
+    modifier = Modifier
+      .fillMaxSize()
+      .background(colors.background)
+      .padding(12.dp)
   ) {
     Row(
-      verticalAlignment = Alignment.CenterVertically
+      modifier = Modifier
+        .fillMaxWidth()
+        .clip(RoundedCornerShape(10.dp))
+        .background(colors.surface)
+        .border(1.dp, colors.border, RoundedCornerShape(10.dp))
+        .padding(12.dp),
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.SpaceBetween
     ) {
       Column(
         modifier = Modifier.weight(1f)
       ) {
-        TextArea(
-          modifier = Modifier.fillMaxWidth().padding(4.dp).testTag("goal").height(goalTextAreaHeight),
-          enabled = scenarioType.isScenario(),
-          state = goal,
-          placeholder = { Text("Goal") },
-          textStyle = JewelTheme.editorTextStyle,
-          decorationBoxModifier = Modifier.padding(horizontal = 8.dp)
+        Text(
+          text = if (scenarioType.isScenario()) "Scenario Inspector" else "Execution Inspector",
+          style = typography.header1,
+          color = colors.textPrimary
         )
-        Divider(
-          orientation = Orientation.Horizontal,
+        val statusText = when {
+          isRunning -> "Running"
+          isAchieved -> "Achieved"
+          else -> "Ready"
+        }
+        val statusColor = when {
+          isRunning -> colors.primary
+          isAchieved -> colors.success
+          else -> colors.textSecondary
+        }
+        Text(
+          text = statusText,
+          style = typography.body,
+          color = statusColor
+        )
+      }
+      Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (isRunning) {
+          OutlinedButton(onClick = { onCancel(scenarioStateHolder) }) {
+            Text("Cancel", color = colors.error)
+          }
+        }
+        OutlinedButton(onClick = { onDebugExecute(scenarioStateHolder) }) {
+          Text("Debug")
+        }
+        OutlinedButton(onClick = { onAddSubScenario(scenarioStateHolder) }) {
+          Text("Add Sub")
+        }
+        OutlinedButton(onClick = { removeDialogShowing = true }) {
+          Text("Delete", color = colors.error)
+        }
+        OutlinedButton(onClick = { onExecute(scenarioStateHolder) }) {
+          Text("Run")
+        }
+      }
+    }
+
+    if (removeDialogShowing) {
+      Dialog(
+        onDismissRequest = { removeDialogShowing = false }
+      ) {
+        Column(
           modifier = Modifier
-            .fillMaxWidth()
-            .pointerHoverIcon(PointerIcon.Hand)
-            .pointerInput(Unit) {
-              detectDragGestures { change, dragAmount ->
-                change.consume()
-                goalTextAreaHeight = (goalTextAreaHeight + dragAmount.y.toDp()).coerceAtLeast(24.dp)
-              }
-            },
-          thickness = 8.dp
-        )
-      }
-      IconActionButton(
-        key = AllIconsKeys.RunConfigurations.TestState.Run,
-        onClick = {
-          onExecute(scenarioStateHolder)
-        },
-        contentDescription = "Run",
-        hint = Size(28)
-      ) {
-        Text(
-          text = "Run with the dependent scenarios",
-        )
-      }
-      IconActionButton(
-        key = AllIconsKeys.Actions.StartDebugger,
-        onClick = {
-          onDebugExecute(scenarioStateHolder)
-        },
-        contentDescription = "Debug Run",
-        hint = Size(28)
-      ) {
-        Text(
-          text = "Run only this scenario",
-        )
-      }
-      IconActionButton(
-        key = AllIconsKeys.Actions.Cancel,
-        onClick = {
-          onCancel(scenarioStateHolder)
-        },
-        contentDescription = "Cancel",
-        hint = Size(28)
-      ) {
-        Text(
-          text = "Cancel",
-        )
-      }
-      IconActionButton(
-        key = AllIconsKeys.CodeStyle.AddNewSectionRule,
-        onClick = {
-          onAddSubScenario(scenarioStateHolder)
-        },
-        contentDescription = "Add sub scenario",
-        hint = Size(28)
-      ) {
-        Text(
-          text = "Add sub scenario",
-        )
-      }
-      var removeDialogShowing by remember { mutableStateOf(false) }
-      IconActionButton(
-        key = AllIconsKeys.General.Delete,
-        onClick = {
-          removeDialogShowing = true
-        },
-        contentDescription = "Remove",
-        hint = Size(28)
-      ) {
-        Text(
-          text = "Remove",
-        )
-      }
-      if (removeDialogShowing) {
-        Dialog(
-          onDismissRequest = { removeDialogShowing = false }
+            .clip(RoundedCornerShape(8.dp))
+            .background(colors.surface)
+            .border(1.dp, colors.border, RoundedCornerShape(8.dp))
+            .padding(12.dp)
         ) {
-          Column(
-            modifier = Modifier.background(JewelTheme.globalColors.panelBackground).padding(8.dp)
-          ) {
-            Text("Are you sure you want to remove this scenario?")
-            Row {
-              OutlinedButton(
-                onClick = {
-                  removeDialogShowing = false
-                }
-              ) {
-                Text("Cancel")
+          Text("Are you sure you want to remove this scenario?")
+          Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(
+              onClick = {
+                removeDialogShowing = false
               }
-              OutlinedButton(
-                onClick = {
-                  removeDialogShowing = false
-                  onRemove(scenarioStateHolder)
-                }
-              ) {
-                Text("Remove")
+            ) {
+              Text("Cancel")
+            }
+            OutlinedButton(
+              onClick = {
+                removeDialogShowing = false
+                onRemove(scenarioStateHolder)
               }
+            ) {
+              Text("Remove")
             }
           }
         }
       }
     }
-    BoxWithConstraints {
+
+    Spacer(modifier = Modifier.height(10.dp))
+
+    Column(
+      modifier = Modifier
+        .fillMaxWidth()
+        .clip(RoundedCornerShape(10.dp))
+        .background(colors.surface)
+        .border(1.dp, colors.border, RoundedCornerShape(10.dp))
+        .padding(12.dp)
+    ) {
+      Text(
+        text = "Goal",
+        style = typography.header2,
+        color = colors.primary
+      )
+      TextArea(
+        modifier = Modifier
+          .fillMaxWidth()
+          .padding(top = 6.dp)
+          .testTag("goal")
+          .height(goalTextAreaHeight),
+        enabled = scenarioType.isScenario(),
+        state = goal,
+        placeholder = { Text("Goal") },
+        textStyle = JewelTheme.editorTextStyle,
+        decorationBoxModifier = Modifier.padding(horizontal = 8.dp)
+      )
+      Divider(
+        orientation = Orientation.Horizontal,
+        modifier = Modifier
+          .fillMaxWidth()
+          .pointerHoverIcon(PointerIcon.Hand)
+          .pointerInput(Unit) {
+            detectDragGestures { change, dragAmount ->
+              change.consume()
+              goalTextAreaHeight = (goalTextAreaHeight + dragAmount.y.toDp()).coerceAtLeast(48.dp)
+            }
+          },
+        thickness = 8.dp
+      )
+    }
+
+    Spacer(modifier = Modifier.height(10.dp))
+
+    BoxWithConstraints(
+      modifier = Modifier
+        .fillMaxWidth()
+        .clip(RoundedCornerShape(10.dp))
+        .background(colors.surface)
+        .border(1.dp, colors.border, RoundedCornerShape(10.dp))
+        .padding(12.dp)
+    ) {
       val maxHeightValue = maxHeight
       ExpandableSection(
         title = "Options",
+        defaultExpanded = false,
         modifier = Modifier.fillMaxWidth()
       ) {
         Column(
-          modifier = Modifier.testTag("scenario_options")
+          modifier = Modifier
+            .testTag("scenario_options")
             .heightIn(max = maxHeightValue * 0.7f)
             .verticalScroll(rememberScrollState())
             .wrapContentHeight(unbounded = true)
@@ -221,6 +253,9 @@ fun Scenario(
         }
       }
     }
+
+    Spacer(modifier = Modifier.height(10.dp))
+
     arbigentScenarioExecutor?.let { arbigentScenarioExecutor ->
       val taskToAgents: List<List<ArbigentTaskAssignment>> by arbigentScenarioExecutor.taskAssignmentsHistoryFlow.collectAsState(
         arbigentScenarioExecutor.taskAssignmentsHistory()
@@ -1030,305 +1065,407 @@ private fun ContentPanel(
   onStepFeedback: (StepFeedbackEvent) -> Unit,
   modifier: Modifier
 ) {
-  Column(modifier.padding(top = 8.dp)) {
-    var selectedHistory by remember(tasksToAgentHistory.size) { mutableStateOf(tasksToAgentHistory.lastIndex) }
-    GroupHeader {
-      Text("AI Agent Logs")
+  val colors = LocalPremiumColors.current
+  val typography = LocalPremiumTypography.current
+  var selectedHistory by remember(tasksToAgentHistory.size) { mutableStateOf(tasksToAgentHistory.lastIndex.coerceAtLeast(0)) }
+  val tasksToAgent = tasksToAgentHistory.getOrNull(selectedHistory).orEmpty()
+  var selectedStep: ArbigentContextHolder.Step? by remember(selectedHistory) { mutableStateOf(null) }
+
+  Column(
+    modifier = modifier
+      .clip(RoundedCornerShape(10.dp))
+      .background(colors.surface)
+      .border(1.dp, colors.border, RoundedCornerShape(10.dp))
+      .padding(10.dp)
+  ) {
+    Row(
+      modifier = Modifier.fillMaxWidth(),
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+      Text("Step Execution Timeline", style = typography.header1, color = colors.textPrimary)
       Dropdown(
         modifier = Modifier.padding(4.dp),
         menuContent = {
-          tasksToAgentHistory.forEachIndexed { index, taskToAgent ->
+          tasksToAgentHistory.forEachIndexed { index, _ ->
             selectableItem(
               selected = index == selectedHistory,
               onClick = { selectedHistory = index },
             ) {
-              Text(
-                text = "History " + index,
-              )
+              Text("History #$index")
             }
           }
         }
       ) {
-        Text("History $selectedHistory")
+        Text("History #$selectedHistory")
       }
     }
-    val tasksToAgent = tasksToAgentHistory[selectedHistory]
-    var selectedStep: ArbigentContextHolder.Step? by remember { mutableStateOf(null) }
-    Row(Modifier) {
+
+    Spacer(modifier = Modifier.height(8.dp))
+    Row(modifier = Modifier.fillMaxSize()) {
       val lazyColumnState = rememberLazyListState()
       val totalItemsCount by derivedStateOf { lazyColumnState.layoutInfo.totalItemsCount }
       LaunchedEffect(totalItemsCount) {
         lazyColumnState.animateScrollToItem(maxOf(totalItemsCount - 1, 0))
       }
       val sections: List<ScenarioSection> = buildSections(tasksToAgent)
-      LazyColumn(state = lazyColumnState, modifier = Modifier.weight(1.5f)) {
+
+      LazyColumn(
+        state = lazyColumnState,
+        modifier = Modifier
+          .weight(1.2f)
+          .fillMaxHeight(),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+      ) {
         sections.forEachIndexed { index, section ->
           stickyHeader {
-            val prefix = if (index + 1 == tasksToAgent.size) {
-              "Goal: "
-            } else {
-              "Dependency scenario goal: "
-            }
-            Row(Modifier.background(Color.White)) {
-              GroupHeader(
-                modifier = Modifier.padding(8.dp)
-                  .weight(1F),
-                text = prefix + section.goal + "(" + (index + 1) + "/" + tasksToAgent.size + ")",
+            val prefix = if (index + 1 == tasksToAgent.size) "Goal: " else "Dependency: "
+            Row(
+              modifier = Modifier
+                .fillMaxWidth()
+                .background(colors.background.copy(alpha = 0.95f))
+                .padding(vertical = 4.dp),
+              verticalAlignment = Alignment.CenterVertically
+            ) {
+              Text(
+                text = prefix + section.goal + " (" + (index + 1) + "/" + tasksToAgent.size + ")",
+                style = typography.header2,
+                color = colors.textSecondary,
+                maxLines = 1
               )
+              Spacer(Modifier.weight(1f))
               if (section.isAchieved()) {
                 PassedMark(
-                  modifier = Modifier.align(Alignment.CenterVertically)
-                    .padding(8.dp)
+                  modifier = Modifier
+                    .size(16.dp)
+                    .background(colors.success)
                 )
               }
             }
           }
+
           itemsIndexed(items = section.steps) { stepIndex, item ->
             val step = item.step
+            val isSelected = step == selectedStep
             Column(
-              Modifier.padding(8.dp)
-                .background(
-                  color = if (step == selectedStep) {
-                    JewelTheme.colorPalette.purple(9)
-                  } else {
-                    Color.Transparent
-                  },
+              modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .background(if (isSelected) colors.surfaceHover else colors.surface)
+                .border(
+                  1.dp,
+                  if (isSelected) colors.primary else colors.border,
+                  RoundedCornerShape(8.dp)
                 )
-                .clickable { selectedStep = step },
+                .clickable { selectedStep = step }
+                .padding(10.dp)
             ) {
-              GroupHeader(
+              Row(
                 modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
               ) {
                 Text(
-                  text = "Step ${stepIndex + 1} (${formatTimestamp(step.timestamp)})",
+                  text = "Step ${stepIndex + 1}",
+                  style = typography.header2,
+                  color = colors.textPrimary
                 )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                  text = formatTimestamp(step.timestamp),
+                  style = typography.monospace,
+                  color = colors.logTimeColor
+                )
+                Spacer(modifier = Modifier.weight(1f))
                 if (step.cacheHit) {
                   Text(
-                    "Cache hit",
-                    modifier = Modifier.padding(4.dp)
-                      .background(JewelTheme.colorPalette.purple(8))
+                    "Cached",
+                    modifier = Modifier
+                      .clip(RoundedCornerShape(6.dp))
+                      .background(colors.primary.copy(alpha = 0.15f))
+                      .padding(horizontal = 6.dp, vertical = 2.dp),
+                    style = typography.body,
+                    color = colors.primary
                   )
                 }
                 if (step.agentAction is ExecuteMcpToolAgentAction) {
-                  Icon(
-                    key = AllIconsKeys.Run.Widget.Build,
-                    contentDescription = "MCP",
-                    modifier = Modifier.padding(4.dp).align(Alignment.CenterVertically),
-                    hint = Size(12),
-                    tint = JewelTheme.colorPalette.purple(1)
-                  )
                   Text(
                     "MCP",
-                    modifier = Modifier.padding(4.dp)
-                      .background(JewelTheme.colorPalette.purple(8))
+                    modifier = Modifier
+                      .padding(start = 4.dp)
+                      .clip(RoundedCornerShape(6.dp))
+                      .background(colors.primary.copy(alpha = 0.15f))
+                      .padding(horizontal = 6.dp, vertical = 2.dp),
+                    style = typography.body,
+                    color = colors.primary
                   )
                 }
                 if (step.isFailed()) {
-                  Icon(
-                    key = AllIconsKeys.General.Error,
-                    contentDescription = "Failed",
-                    modifier = Modifier.padding(4.dp).align(Alignment.CenterVertically),
-                    hint = Size(12)
+                  Text(
+                    "Failed",
+                    modifier = Modifier
+                      .padding(start = 4.dp)
+                      .clip(RoundedCornerShape(6.dp))
+                      .background(colors.errorBg)
+                      .padding(horizontal = 6.dp, vertical = 2.dp),
+                    style = typography.body,
+                    color = colors.error
                   )
                 } else if (item.isAchieved()) {
-                  PassedMark(
-                    modifier = Modifier.padding(4.dp).size(12.dp)
-                      .align(Alignment.CenterVertically)
+                  Text(
+                    "Achieved",
+                    modifier = Modifier
+                      .padding(start = 4.dp)
+                      .clip(RoundedCornerShape(6.dp))
+                      .background(colors.successBg)
+                      .padding(horizontal = 6.dp, vertical = 2.dp),
+                    style = typography.body,
+                    color = colors.success
                   )
                 }
               }
+              Spacer(modifier = Modifier.height(6.dp))
               Text(
-                modifier = Modifier.padding(8.dp),
-                text = step.text()
+                text = step.text(),
+                style = typography.body,
+                color = colors.textPrimary,
               )
-              // AI feedback button
               if (step.apiCallJsonLFilePath != null) {
+                val feedbackHintText =
+                  "Feedback data is stored locally in project result files(result.yaml). You can later use these evaluations to:\n" +
+                    "• Fine-tune AI models\n• Optimize prompt sequences\n• Analyze response patterns\nNo data leaves your environment."
                 Row {
-                  // Good feedback button
-                  val isGood =
-                    stepFeedbacks.any { it is StepFeedback.Good && it.stepId == step.stepId }
-                  val feedbackHintText =
-                    "Feedback data is stored locally in project result files(result.yaml). You can later use these evaluations to:\n" +
-                      "         • Fine-tune AI models\n" +
-                      "         • Optimize prompt sequences\n" +
-                      "         • Analyze response patterns \n" +
-                      "No data leaves your environment."
+                  val isGood = stepFeedbacks.any { it is StepFeedback.Good && it.stepId == step.stepId }
                   IconActionButton(
                     key = AllIconsKeys.Ide.Like,
                     onClick = {
                       onStepFeedback(
-                        if (isGood) {
-                          StepFeedbackEvent.RemoveGood(step.stepId)
-                        } else {
-                          StepFeedback.Good(step.stepId)
-                        }
+                        if (isGood) StepFeedbackEvent.RemoveGood(step.stepId) else StepFeedback.Good(step.stepId)
                       )
                     },
-                    colorFilter = if (isGood) {
-                      ColorFilter.tint(JewelTheme.colorPalette.green(8))
-                    } else {
-                      null
-                    },
+                    colorFilter = if (isGood) ColorFilter.tint(colors.success) else null,
                     contentDescription = feedbackHintText,
                     hint = Size(16),
-                  ) {
-                    Text(
-                      text = feedbackHintText,
-                    )
-                  }
-                  // Bad feedback button
-                  val isBad =
-                    stepFeedbacks.any { it is StepFeedback.Bad && it.stepId == step.stepId }
+                  ) { Text(feedbackHintText) }
+                  val isBad = stepFeedbacks.any { it is StepFeedback.Bad && it.stepId == step.stepId }
                   IconActionButton(
                     key = AllIconsKeys.Ide.Dislike,
                     onClick = {
                       onStepFeedback(
-                        if (isBad) {
-                          StepFeedbackEvent.RemoveBad(step.stepId)
-                        } else {
-                          StepFeedback.Bad(step.stepId)
-                        }
+                        if (isBad) StepFeedbackEvent.RemoveBad(step.stepId) else StepFeedback.Bad(step.stepId)
                       )
                     },
-                    colorFilter = if (isBad) {
-                      ColorFilter.tint(JewelTheme.colorPalette.red(8))
-                    } else {
-                      null
-                    },
+                    colorFilter = if (isBad) ColorFilter.tint(colors.error) else null,
                     contentDescription = feedbackHintText,
                     hint = Size(16),
-                  ) {
-                    Text(
-                      text = feedbackHintText,
-                    )
-                  }
+                  ) { Text(feedbackHintText) }
                 }
               }
             }
           }
           item {
             if (section.isRunning) {
-              Column(Modifier.fillMaxWidth()) {
+              Box(modifier = Modifier.fillMaxWidth()) {
                 CircularProgressIndicator(
-                  modifier = Modifier.padding(8.dp).align(Alignment.CenterHorizontally),
+                  modifier = Modifier.padding(8.dp).align(Alignment.Center)
                 )
               }
             }
           }
         }
       }
-      selectedStep?.let { step ->
-        val scrollableState = rememberScrollState()
-        Column(
-          Modifier
-            .weight(1.5f)
-            .padding(8.dp)
-            .verticalScroll(scrollableState),
-        ) {
-          step.uiTreeStrings?.let {
-            val clipboardManager = LocalClipboardManager.current
-            ExpandableSection(
-              "All UI Tree(length=${it.allTreeString.length})",
-              modifier = Modifier.fillMaxWidth()
-            ) {
-              Text(
-                modifier = Modifier
-                  .padding(8.dp)
-                  .clickable {
-                    clipboardManager.setText(
-                      annotatedString = buildAnnotatedString { append(it.allTreeString) }
-                    )
-                  }
-                  .background(JewelTheme.globalColors.panelBackground),
-                text = it.allTreeString
-              )
-            }
-            ExpandableSection(
-              "Optimized UI Tree(length=${it.optimizedTreeString.length})",
-              modifier = Modifier.fillMaxWidth()
-            ) {
-              Text(
-                modifier = Modifier
-                  .padding(8.dp)
-                  .background(JewelTheme.globalColors.panelBackground),
-                text = it.optimizedTreeString
-              )
-            }
-          }
-          step.aiRequest?.let { request: String ->
-            ExpandableSection(
-              title = "AI Request",
-              defaultExpanded = true,
-              modifier = Modifier.fillMaxWidth()
-            ) {
-              Text(
-                modifier = Modifier
-                  .padding(8.dp)
-                  .background(JewelTheme.globalColors.panelBackground),
-                text = request
-              )
-            }
-          }
-          step.aiResponse?.let { response: String ->
-            ExpandableSection(
-              title = "AI Response",
-              defaultExpanded = true,
-              modifier = Modifier.fillMaxWidth()
-            ) {
-              Text(
-                modifier = Modifier
-                  .padding(8.dp)
-                  .background(JewelTheme.globalColors.panelBackground),
-                text = response
-              )
-            }
-          }
-        }
-        Column(
-          Modifier
-            .verticalScroll(rememberScrollState())
-            .fillMaxHeight()
-            .weight(1f)
-            .padding(8.dp),
-          verticalArrangement = Arrangement.Center,
-        ) {
-          val filePath = File(step.screenshotFilePath).getAnnotatedFilePath()
-          if (File(filePath).exists()) {
-            ExpandableSection(
-              title = "Annotated Screenshot",
-              defaultExpanded = true,
-              modifier = Modifier.fillMaxWidth()
-            ) {
-              Image(
-                bitmap = loadImageBitmap(FileInputStream(filePath)),
-                contentDescription = "screenshot",
-              )
-              Text(
-                modifier = Modifier.onClick {
-                  Desktop.getDesktop().open(File(filePath))
-                },
-                text = "Screenshot($filePath)"
-              )
-            }
-          }
-          ExpandableSection(
-            title = "Screenshot",
-            defaultExpanded = false,
-            modifier = Modifier.fillMaxWidth()
+
+      Spacer(modifier = Modifier.width(10.dp))
+      Box(
+        modifier = Modifier
+          .weight(1.3f)
+          .fillMaxHeight()
+          .clip(RoundedCornerShape(10.dp))
+          .background(colors.background)
+          .border(1.dp, colors.border, RoundedCornerShape(10.dp))
+          .padding(10.dp)
+      ) {
+        if (selectedStep == null) {
+          Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
           ) {
-            val filePath = step.screenshotFilePath
-            Image(
-              bitmap = loadImageBitmap(FileInputStream(filePath)),
-              contentDescription = "screenshot",
-            )
             Text(
-              modifier = Modifier.onClick {
-                Desktop.getDesktop().open(File(filePath))
-              },
-              text = "Screenshot($filePath)"
+              text = "Select a step to inspect screenshots and details",
+              style = typography.body,
+              color = colors.textSecondary
             )
           }
+        } else {
+          StepInspectorDetail(selectedStep!!)
         }
+      }
+    }
+  }
+}
+
+@Composable
+private fun StepInspectorDetail(step: ArbigentContextHolder.Step) {
+  val colors = LocalPremiumColors.current
+  val typography = LocalPremiumTypography.current
+  val clipboardManager = LocalClipboardManager.current
+  val scrollableState = rememberScrollState()
+  val annotatedPath = File(step.screenshotFilePath).getAnnotatedFilePath()
+
+  Column(
+    modifier = Modifier
+      .fillMaxSize()
+      .verticalScroll(scrollableState),
+  ) {
+    Text("Step Inspector", style = typography.header2, color = colors.primary)
+    Spacer(modifier = Modifier.height(8.dp))
+
+    Row(
+      modifier = Modifier
+        .fillMaxWidth()
+        .height(280.dp),
+      horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+      ScreenshotThumbnail(
+        title = "Screenshot",
+        filePath = step.screenshotFilePath,
+        modifier = Modifier.weight(1f)
+      )
+      ScreenshotThumbnail(
+        title = "AI Annotated",
+        filePath = annotatedPath,
+        modifier = Modifier.weight(1f)
+      )
+    }
+
+    Spacer(modifier = Modifier.height(8.dp))
+
+    step.uiTreeStrings?.let {
+      ExpandableSection(
+        "All UI Tree (length=${it.allTreeString.length})",
+        defaultExpanded = false,
+        modifier = Modifier.fillMaxWidth()
+      ) {
+        Text(
+          modifier = Modifier
+            .padding(8.dp)
+            .clickable {
+              clipboardManager.setText(
+                annotatedString = buildAnnotatedString { append(it.allTreeString) }
+              )
+            }
+            .background(colors.surface)
+            .padding(8.dp),
+          text = it.allTreeString,
+          style = typography.monospace,
+          color = colors.textPrimary
+        )
+      }
+      ExpandableSection(
+        "Optimized UI Tree (length=${it.optimizedTreeString.length})",
+        defaultExpanded = false,
+        modifier = Modifier.fillMaxWidth()
+      ) {
+        Text(
+          modifier = Modifier
+            .padding(8.dp)
+            .background(colors.surface)
+            .padding(8.dp),
+          text = it.optimizedTreeString,
+          style = typography.monospace,
+          color = colors.textPrimary
+        )
+      }
+    }
+
+    step.aiRequest?.let { request ->
+      ExpandableSection(
+        title = "AI Request",
+        defaultExpanded = false,
+        modifier = Modifier.fillMaxWidth()
+      ) {
+        Text(
+          modifier = Modifier
+            .padding(8.dp)
+            .background(colors.surface)
+            .padding(8.dp),
+          text = request,
+          style = typography.monospace,
+          color = colors.textPrimary
+        )
+      }
+    }
+    step.aiResponse?.let { response ->
+      ExpandableSection(
+        title = "AI Response",
+        defaultExpanded = true,
+        modifier = Modifier.fillMaxWidth()
+      ) {
+        Text(
+          modifier = Modifier
+            .padding(8.dp)
+            .background(colors.surface)
+            .padding(8.dp),
+          text = response,
+          style = typography.monospace,
+          color = colors.textPrimary
+        )
+      }
+    }
+  }
+}
+
+@Composable
+private fun ScreenshotThumbnail(
+  title: String,
+  filePath: String,
+  modifier: Modifier = Modifier
+) {
+  val colors = LocalPremiumColors.current
+  val typography = LocalPremiumTypography.current
+  var showBigImage by remember(filePath) { mutableStateOf(false) }
+  val imageBitmap = remember(filePath) {
+    runCatching { FileInputStream(filePath).use { loadImageBitmap(it) } }.getOrNull()
+  }
+
+  Column(modifier = modifier) {
+    Text(text = title, style = typography.body, color = colors.textSecondary)
+    Spacer(modifier = Modifier.height(4.dp))
+    Box(
+      modifier = Modifier
+        .fillMaxSize()
+        .clip(RoundedCornerShape(8.dp))
+        .background(colors.surface)
+        .border(1.dp, colors.border, RoundedCornerShape(8.dp))
+        .clickable(enabled = imageBitmap != null) { showBigImage = true },
+      contentAlignment = Alignment.Center
+    ) {
+      if (imageBitmap != null) {
+        Image(
+          bitmap = imageBitmap,
+          contentDescription = title,
+          modifier = Modifier.fillMaxSize()
+        )
+      } else {
+        Text("No image", style = typography.body, color = colors.textSecondary)
+      }
+    }
+  }
+
+  if (showBigImage && imageBitmap != null) {
+    Dialog(onDismissRequest = { showBigImage = false }) {
+      Box(
+        modifier = Modifier
+          .fillMaxSize()
+          .background(Color.Black.copy(alpha = 0.88f))
+          .clickable { showBigImage = false }
+          .padding(16.dp),
+        contentAlignment = Alignment.Center
+      ) {
+        Image(
+          bitmap = imageBitmap,
+          contentDescription = "zoomed-$title",
+          modifier = Modifier.fillMaxSize()
+        )
       }
     }
   }

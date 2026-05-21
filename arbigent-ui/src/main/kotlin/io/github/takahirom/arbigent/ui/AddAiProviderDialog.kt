@@ -1,21 +1,41 @@
 package io.github.takahirom.arbigent.ui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicSecureTextField
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import org.jetbrains.jewel.intui.standalone.styling.light
-import org.jetbrains.jewel.ui.component.*
-import org.jetbrains.jewel.ui.component.styling.TextFieldStyle
+import org.jetbrains.jewel.ui.component.DefaultButton
+import org.jetbrains.jewel.ui.component.OutlinedButton
+import org.jetbrains.jewel.ui.component.RadioButtonRow
+import org.jetbrains.jewel.ui.component.Text
+import org.jetbrains.jewel.ui.component.TextField
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AddAiProviderDialog(
   aiSettingStateHolder: AiSettingStateHolder,
@@ -23,347 +43,354 @@ fun AddAiProviderDialog(
   onCloseRequest: () -> Unit
 ) {
   val isEditMode = editingProvider != null
+  val colors = LocalPremiumColors.current
+  val typography = LocalPremiumTypography.current
+
+  var selectedType by remember {
+    mutableStateOf(
+      when (editingProvider) {
+        is AiProviderSetting.OpenAi -> "OpenAi"
+        is AiProviderSetting.Gemini -> "Gemini"
+        is AiProviderSetting.NvidiaNim -> "NvidiaNim"
+        is AiProviderSetting.CustomOpenAiApiBasedAi -> "CustomOpenAiApiBasedAi"
+        is AiProviderSetting.AzureOpenAi -> "AzureOpenAi"
+        else -> "OpenAi"
+      }
+    )
+  }
+
+  val idState = remember {
+    TextFieldState(editingProvider?.id ?: selectedType)
+  }
+  val modelNameState = remember {
+    TextFieldState(
+      when (editingProvider) {
+        is AiProviderSetting.OpenAi -> editingProvider.modelName
+        is AiProviderSetting.Gemini -> editingProvider.modelName
+        is AiProviderSetting.NvidiaNim -> editingProvider.modelName
+        is AiProviderSetting.CustomOpenAiApiBasedAi -> editingProvider.modelName
+        is AiProviderSetting.AzureOpenAi -> editingProvider.modelName
+        else -> ""
+      }
+    )
+  }
+  val apiKeyState = remember {
+    TextFieldState(
+      when (editingProvider) {
+        is AiProviderSetting.OpenAi -> editingProvider.apiKey
+        is AiProviderSetting.Gemini -> editingProvider.apiKey
+        is AiProviderSetting.NvidiaNim -> editingProvider.apiKey
+        is AiProviderSetting.CustomOpenAiApiBasedAi -> editingProvider.apiKey
+        is AiProviderSetting.AzureOpenAi -> editingProvider.apiKey
+        else -> ""
+      }
+    )
+  }
+  val baseUrlState = remember {
+    TextFieldState((editingProvider as? AiProviderSetting.CustomOpenAiApiBasedAi)?.baseUrl ?: "")
+  }
+  val endpointState = remember {
+    TextFieldState((editingProvider as? AiProviderSetting.AzureOpenAi)?.endpoint ?: "")
+  }
+  val nvidiaEndpointState = remember {
+    TextFieldState((editingProvider as? AiProviderSetting.NvidiaNim)?.baseUrl ?: "https://integrate.api.nvidia.com/v1/")
+  }
+  val apiVersionState = remember {
+    TextFieldState((editingProvider as? AiProviderSetting.AzureOpenAi)?.apiVersion ?: "2025-01-01-preview")
+  }
+
+  LaunchedEffect(selectedType, isEditMode) {
+    if (!isEditMode) {
+      idState.edit { replace(0, length, selectedType) }
+    }
+  }
+
+  val existingIds = aiSettingStateHolder.aiSetting.aiSettings.map { it.id }
+  val idText = idState.text.toString().trim()
+  val modelNameText = modelNameState.text.toString().trim()
+  val baseUrlText = baseUrlState.text.toString().trim()
+  val endpointText = endpointState.text.toString().trim()
+  val nvidiaEndpointText = nvidiaEndpointState.text.toString().trim()
+  val apiVersionText = apiVersionState.text.toString().trim()
+  val isIdDuplicate = if (isEditMode) {
+    existingIds.filter { it != editingProvider?.id }.contains(idText)
+  } else {
+    existingIds.contains(idText)
+  }
+  val isIdValid = idText.isNotEmpty() && !isIdDuplicate
+  val isBaseUrlEndsWithSlash = baseUrlText.isEmpty() || baseUrlText.endsWith("/")
+  val isEndpointEndsWithSlash = endpointText.isEmpty() || endpointText.endsWith("/")
+  val isNvidiaEndpointEndsWithSlash = nvidiaEndpointText.isEmpty() || nvidiaEndpointText.endsWith("/")
+
+  val canSubmit = when (selectedType) {
+      "NvidiaNim" -> isIdValid && modelNameText.isNotEmpty() && nvidiaEndpointText.isNotEmpty()
+      "CustomOpenAiApiBasedAi" -> isIdValid && modelNameText.isNotEmpty() && baseUrlText.isNotEmpty()
+      "AzureOpenAi" -> isIdValid && modelNameText.isNotEmpty() && endpointText.isNotEmpty() && apiVersionText.isNotEmpty()
+      else -> isIdValid && modelNameText.isNotEmpty()
+  }
+
+  fun saveProvider() {
+    val provider = when (selectedType) {
+      "CustomOpenAiApiBasedAi" -> AiProviderSetting.CustomOpenAiApiBasedAi(
+        id = idText,
+        apiKey = apiKeyState.text.toString(),
+        modelName = modelNameText,
+        baseUrl = if (baseUrlText.endsWith("/")) baseUrlText else "$baseUrlText/"
+      )
+
+      "AzureOpenAi" -> AiProviderSetting.AzureOpenAi(
+        id = idText,
+        apiKey = apiKeyState.text.toString(),
+        modelName = modelNameText,
+        endpoint = if (endpointText.endsWith("/")) endpointText else "$endpointText/",
+        apiVersion = apiVersionText
+      )
+
+      "NvidiaNim" -> AiProviderSetting.NvidiaNim(
+        id = idText,
+        apiKey = apiKeyState.text.toString(),
+        modelName = modelNameText,
+        baseUrl = if (nvidiaEndpointText.endsWith("/")) nvidiaEndpointText else "$nvidiaEndpointText/"
+      )
+
+      "Gemini" -> AiProviderSetting.Gemini(
+        id = idText,
+        apiKey = apiKeyState.text.toString(),
+        modelName = modelNameText
+      )
+
+      else -> AiProviderSetting.OpenAi(
+        id = idText,
+        apiKey = apiKeyState.text.toString(),
+        modelName = modelNameText
+      )
+    }
+
+    if (isEditMode) {
+      aiSettingStateHolder.updateAiProvider(provider)
+    } else {
+      aiSettingStateHolder.addAiProvider(provider)
+    }
+    onCloseRequest()
+  }
+
   TestCompatibleDialog(
     onCloseRequest = onCloseRequest,
     title = if (isEditMode) "Edit AI Provider" else "Add New AI Provider",
     content = {
-      val scrollState = rememberScrollState()
-      Column {
+      Box(
+        modifier = Modifier
+          .fillMaxSize()
+          .background(colors.background)
+      ) {
         Column(
           modifier = Modifier
+            .fillMaxSize()
             .padding(16.dp)
-            .weight(1F)
-            .verticalScroll(scrollState)
         ) {
-          GroupHeader("AI Provider Type")
-
-          var selectedType by remember { 
-            mutableStateOf(
-              when (editingProvider) {
-                is AiProviderSetting.OpenAi -> "OpenAi"
-                is AiProviderSetting.Gemini -> "Gemini"
-                is AiProviderSetting.CustomOpenAiApiBasedAi -> "CustomOpenAiApiBasedAi"
-                is AiProviderSetting.AzureOpenAi -> "AzureOpenAi"
-                else -> "OpenAi"
-              }
-            )
-          }
+          Text(
+            text = "Set your provider credentials and model configuration.",
+            color = colors.textSecondary,
+            style = typography.body
+          )
+          Spacer(modifier = Modifier.height(12.dp))
 
           Column(
-            modifier = Modifier.padding(8.dp)
+            modifier = Modifier
+              .weight(1f)
+              .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
           ) {
-            Row(
-              verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
-            ) {
-              RadioButtonRow(
-                text = "OpenAI",
-                selected = selectedType == "OpenAi",
-                onClick = {
-                  if (!isEditMode) selectedType = "OpenAi"
-                },
-                enabled = !isEditMode
-              )
-            }
-            Row(
-              verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
-            ) {
-              RadioButtonRow(
-                text = "Gemini",
-                selected = selectedType == "Gemini",
-                onClick = {
-                  if (!isEditMode) selectedType = "Gemini"
-                },
-                enabled = !isEditMode
-              )
-            }
-            Row(
-              verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
-            ) {
-              RadioButtonRow(
-                text = "Custom OpenAI API Based AI",
-                selected = selectedType == "CustomOpenAiApiBasedAi",
-                onClick = {
-                  if (!isEditMode) selectedType = "CustomOpenAiApiBasedAi"
-                },
-                enabled = !isEditMode
-              )
-            }
-            Row(
-              verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
-            ) {
-              RadioButtonRow(
-                text = "Azure OpenAI",
-                selected = selectedType == "AzureOpenAi",
-                onClick = {
-                  if (!isEditMode) selectedType = "AzureOpenAi"
-                },
-                enabled = !isEditMode
-              )
-            }
-          }
-
-          GroupHeader("Provider ID")
-          val idState = remember { 
-            TextFieldState(editingProvider?.id ?: selectedType) 
-          }
-
-          // Update ID state when selected type changes (only in add mode)
-          LaunchedEffect(selectedType) {
-            if (!isEditMode) {
-              idState.edit { replace(0, length, selectedType) }
-            }
-          }
-
-          TextField(
-            state = idState,
-            modifier = Modifier.padding(8.dp).fillMaxWidth(),
-            placeholder = { Text("Enter a unique ID for this provider") },
-            enabled = !isEditMode
-          )
-
-          // Check if ID already exists
-          val existingIds = aiSettingStateHolder.aiSetting.aiSettings.map { it.id }
-          val idText = idState.text.toString()
-          val isIdEmpty = idText.isEmpty()
-          val isIdDuplicate = if (isEditMode) {
-            // In edit mode, only check for duplicates with other providers (exclude current provider)
-            existingIds.filter { it != editingProvider?.id }.contains(idText)
-          } else {
-            existingIds.contains(idText)
-          }
-          val isIdValid = !isIdEmpty && !isIdDuplicate
-
-          if (!isIdValid && !isIdEmpty) {
-            Text(
-              text = if (isIdDuplicate) "Error: ID already exists. Please choose a different ID." else "ID must not be empty",
-              color = Color.Red,
-              modifier = Modifier.padding(8.dp)
-            )
-          }
-
-          GroupHeader("Model Name")
-          val modelNameState = remember { 
-            TextFieldState(
-              when (editingProvider) {
-                is AiProviderSetting.OpenAi -> editingProvider.modelName
-                is AiProviderSetting.Gemini -> editingProvider.modelName
-                is AiProviderSetting.CustomOpenAiApiBasedAi -> editingProvider.modelName
-                is AiProviderSetting.AzureOpenAi -> editingProvider.modelName
-                else -> ""
-              }
-            )
-          }
-          TextField(
-            state = modelNameState,
-            modifier = Modifier.padding(8.dp).fillMaxWidth(),
-            placeholder = { Text("Enter model name (e.g., gpt-4.1)") }
-          )
-
-          GroupHeader("API Key")
-          val apiKeyState = remember { 
-            TextFieldState(
-              when (editingProvider) {
-                is AiProviderSetting.OpenAi -> editingProvider.apiKey
-                is AiProviderSetting.Gemini -> editingProvider.apiKey
-                is AiProviderSetting.CustomOpenAiApiBasedAi -> editingProvider.apiKey
-                is AiProviderSetting.AzureOpenAi -> editingProvider.apiKey
-                else -> ""
-              }
-            )
-          }
-          BasicSecureTextField(
-            modifier = Modifier.padding(8.dp).fillMaxWidth(),
-            decorator = {
-              Box(
-                Modifier.background(color = TextFieldStyle.light().colors.background)
-                  .padding(8.dp)
-                  .clip(RoundedCornerShape(4.dp))
+            SettingsCard(title = "AI Provider Type") {
+              FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
               ) {
-                if (apiKeyState.text.isEmpty()) {
-                  Text("Enter API Key (Saved in Keychain on Mac)")
-                }
-                it()
-              }
-            },
-            state = apiKeyState,
-          )
-
-          // Additional fields based on selected type
-          when (selectedType) {
-            "CustomOpenAiApiBasedAi" -> {
-              GroupHeader("Base URL")
-              val baseUrlState = remember { 
-                TextFieldState(
-                  (editingProvider as? AiProviderSetting.CustomOpenAiApiBasedAi)?.baseUrl ?: ""
+                RadioButtonRow(
+                  text = "OpenAI",
+                  selected = selectedType == "OpenAi",
+                  onClick = { if (!isEditMode) selectedType = "OpenAi" },
+                  enabled = !isEditMode
                 )
-              }
-              val baseUrlText = baseUrlState.text.toString()
-              val isBaseUrlEndsWithSlash = baseUrlText.isEmpty() || baseUrlText.endsWith("/")
-
-              TextField(
-                state = baseUrlState,
-                modifier = Modifier.padding(8.dp).fillMaxWidth(),
-                placeholder = { Text("Enter base URL (e.g., http://localhost:11434/v1/)") }
-              )
-
-              if (!isBaseUrlEndsWithSlash) {
-                Text(
-                  text = "Warning: URL should end with a slash (/)",
-                  color = Color(0xFFF57C00), // Orange warning color
-                  modifier = Modifier.padding(horizontal = 8.dp)
+                RadioButtonRow(
+                  text = "Gemini",
+                  selected = selectedType == "Gemini",
+                  onClick = { if (!isEditMode) selectedType = "Gemini" },
+                  enabled = !isEditMode
                 )
-              }
-
-              // Add/Update button
-              OutlinedButton(
-                onClick = {
-                  if (isIdValid && modelNameState.text.isNotEmpty() && baseUrlState.text.isNotEmpty()) {
-                    // Ensure URL ends with a slash
-                    var baseUrl = baseUrlState.text.toString()
-                    if (!baseUrl.endsWith("/")) {
-                      baseUrl += "/"
+                RadioButtonRow(
+                  text = "NVIDIA NIM (Gemma/Llama)",
+                  selected = selectedType == "NvidiaNim",
+                  onClick = {
+                    if (!isEditMode) {
+                      selectedType = "NvidiaNim"
+                      modelNameState.edit {
+                        replace(0, length, "google/gemma-3n-e4b-it")
+                      }
                     }
-
-                    val provider = AiProviderSetting.CustomOpenAiApiBasedAi(
-                      id = idState.text.toString(),
-                      apiKey = apiKeyState.text.toString(),
-                      modelName = modelNameState.text.toString(),
-                      baseUrl = baseUrl
-                    )
-                    
-                    if (isEditMode) {
-                      aiSettingStateHolder.updateAiProvider(provider)
-                    } else {
-                      aiSettingStateHolder.addAiProvider(provider)
-                    }
-                    onCloseRequest()
-                  }
-                },
-                enabled = isIdValid && modelNameState.text.isNotEmpty() && baseUrlState.text.isNotEmpty(),
-                modifier = Modifier.padding(8.dp)
-              ) {
-                Text(if (isEditMode) "Update Provider" else "Add Provider")
+                  },
+                  enabled = !isEditMode
+                )
+                RadioButtonRow(
+                  text = "Custom OpenAI API Based AI",
+                  selected = selectedType == "CustomOpenAiApiBasedAi",
+                  onClick = { if (!isEditMode) selectedType = "CustomOpenAiApiBasedAi" },
+                  enabled = !isEditMode
+                )
+                RadioButtonRow(
+                  text = "Azure OpenAI",
+                  selected = selectedType == "AzureOpenAi",
+                  onClick = { if (!isEditMode) selectedType = "AzureOpenAi" },
+                  enabled = !isEditMode
+                )
               }
             }
 
-            "AzureOpenAi" -> {
-              GroupHeader("Endpoint")
-              val endpointState = remember { 
-                TextFieldState(
-                  (editingProvider as? AiProviderSetting.AzureOpenAi)?.endpoint ?: ""
-                )
-              }
-              val endpointText = endpointState.text.toString()
-              val isEndpointEndsWithSlash = endpointText.isEmpty() || endpointText.endsWith("/")
-
+            SettingsCard(title = "Basic Settings") {
+              Text("Provider ID", color = colors.textSecondary, style = typography.body)
               TextField(
-                state = endpointState,
-                modifier = Modifier.padding(8.dp).fillMaxWidth(),
-                placeholder = { Text("Enter endpoint URL (e.g., https://{endpoint}/openai/deployments/{deployment-id}/)") }
+                state = idState,
+                modifier = Modifier.padding(top = 6.dp).fillMaxWidth(),
+                placeholder = { Text("Enter a unique ID for this provider") },
+                enabled = !isEditMode
               )
-
-              if (!isEndpointEndsWithSlash) {
+              if (!isIdValid && idText.isNotEmpty()) {
                 Text(
-                  text = "Warning: URL should end with a slash (/)",
-                  color = Color(0xFFF57C00), // Orange warning color
-                  modifier = Modifier.padding(horizontal = 8.dp)
+                  text = if (isIdDuplicate) {
+                    "Error: ID already exists. Please choose a different ID."
+                  } else {
+                    "ID must not be empty"
+                  },
+                  color = colors.error,
+                  modifier = Modifier.padding(top = 6.dp)
                 )
               }
 
-              GroupHeader("API Version")
-              val apiVersionState = remember { 
-                TextFieldState(
-                  (editingProvider as? AiProviderSetting.AzureOpenAi)?.apiVersion ?: "2025-01-01-preview"
-                )
-              }
+              Spacer(modifier = Modifier.height(10.dp))
+              Text("Model Name", color = colors.textSecondary, style = typography.body)
               TextField(
-                state = apiVersionState,
-                modifier = Modifier.padding(8.dp).fillMaxWidth(),
-                placeholder = { Text("Enter API version") }
+                state = modelNameState,
+                modifier = Modifier.padding(top = 6.dp).fillMaxWidth(),
+                placeholder = { Text("Enter model name (e.g., gpt-4.1)") }
               )
 
-              // Add/Update button
-              OutlinedButton(
-                onClick = {
-                  if (isIdValid && modelNameState.text.isNotEmpty() &&
-                    endpointState.text.isNotEmpty() && apiVersionState.text.isNotEmpty()
+              Spacer(modifier = Modifier.height(10.dp))
+              Text("API Key", color = colors.textSecondary, style = typography.body)
+              BasicSecureTextField(
+                modifier = Modifier
+                  .padding(top = 6.dp)
+                  .fillMaxWidth(),
+                decorator = {
+                  Box(
+                    Modifier
+                      .fillMaxWidth()
+                      .clip(RoundedCornerShape(8.dp))
+                      .background(colors.surface)
+                      .border(1.dp, colors.border, RoundedCornerShape(8.dp))
+                      .padding(10.dp)
                   ) {
-                    // Ensure URL ends with a slash
-                    var endpoint = endpointState.text.toString()
-                    if (!endpoint.endsWith("/")) {
-                      endpoint += "/"
+                    if (apiKeyState.text.isEmpty()) {
+                      Text(
+                        text = "Enter API Key (Saved in Keychain on Mac)",
+                        color = colors.textSecondary
+                      )
                     }
-
-                    val provider = AiProviderSetting.AzureOpenAi(
-                      id = idState.text.toString(),
-                      apiKey = apiKeyState.text.toString(),
-                      modelName = modelNameState.text.toString(),
-                      endpoint = endpoint,
-                      apiVersion = apiVersionState.text.toString()
-                    )
-                    
-                    if (isEditMode) {
-                      aiSettingStateHolder.updateAiProvider(provider)
-                    } else {
-                      aiSettingStateHolder.addAiProvider(provider)
-                    }
-                    onCloseRequest()
+                    it()
                   }
                 },
-                enabled = isIdValid && modelNameState.text.isNotEmpty() &&
-                  endpointState.text.isNotEmpty() && apiVersionState.text.isNotEmpty(),
-                modifier = Modifier.padding(8.dp)
-              ) {
-                Text(if (isEditMode) "Update Provider" else "Add Provider")
-              }
+                state = apiKeyState,
+              )
             }
 
-            else -> { // OpenAi or Gemini
-              // Add/Update button
-              OutlinedButton(
-                onClick = {
-                  if (isIdValid && modelNameState.text.isNotEmpty()) {
-                    val provider = if (selectedType == "OpenAi") {
-                      AiProviderSetting.OpenAi(
-                        id = idState.text.toString(),
-                        apiKey = apiKeyState.text.toString(),
-                        modelName = modelNameState.text.toString()
-                      )
-                    } else {
-                      AiProviderSetting.Gemini(
-                        id = idState.text.toString(),
-                        apiKey = apiKeyState.text.toString(),
-                        modelName = modelNameState.text.toString()
-                      )
-                    }
-                    
-                    if (isEditMode) {
-                      aiSettingStateHolder.updateAiProvider(provider)
-                    } else {
-                      aiSettingStateHolder.addAiProvider(provider)
-                    }
-                    onCloseRequest()
+            when (selectedType) {
+              "NvidiaNim" -> {
+                SettingsCard(title = "Connection Settings") {
+                  Text("Endpoint", color = colors.textSecondary, style = typography.body)
+                  TextField(
+                    state = nvidiaEndpointState,
+                    modifier = Modifier.padding(top = 6.dp).fillMaxWidth(),
+                    placeholder = { Text("Enter endpoint URL (e.g., https://integrate.api.nvidia.com/v1/)") }
+                  )
+                  if (!isNvidiaEndpointEndsWithSlash) {
+                    Text(
+                      text = "Warning: URL should end with a slash (/)",
+                      color = Color(0xFFF59E0B),
+                      modifier = Modifier.padding(top = 6.dp)
+                    )
                   }
-                },
-                enabled = isIdValid && modelNameState.text.isNotEmpty(),
-                modifier = Modifier.padding(8.dp)
-              ) {
-                Text(if (isEditMode) "Update Provider" else "Add Provider")
+                  Text(
+                    text = "Use NVIDIA API key (NVIDIA_API_KEY). For Gemma models, set model like google/gemma-3n-e4b-it.",
+                    color = colors.textSecondary,
+                    style = typography.body,
+                    modifier = Modifier.padding(top = 8.dp)
+                  )
+                }
+              }
+
+              "CustomOpenAiApiBasedAi" -> {
+                SettingsCard(title = "Connection Settings") {
+                  Text("Base URL", color = colors.textSecondary, style = typography.body)
+                  TextField(
+                    state = baseUrlState,
+                    modifier = Modifier.padding(top = 6.dp).fillMaxWidth(),
+                    placeholder = { Text("Enter base URL (e.g., http://localhost:11434/v1/)") }
+                  )
+                  if (!isBaseUrlEndsWithSlash) {
+                    Text(
+                      text = "Warning: URL should end with a slash (/)",
+                      color = Color(0xFFF59E0B),
+                      modifier = Modifier.padding(top = 6.dp)
+                    )
+                  }
+                }
+              }
+
+              "AzureOpenAi" -> {
+                SettingsCard(title = "Connection Settings") {
+                  Text("Endpoint", color = colors.textSecondary, style = typography.body)
+                  TextField(
+                    state = endpointState,
+                    modifier = Modifier.padding(top = 6.dp).fillMaxWidth(),
+                    placeholder = { Text("Enter endpoint URL (e.g., https://{endpoint}/openai/deployments/{deployment-id}/)") }
+                  )
+                  if (!isEndpointEndsWithSlash) {
+                    Text(
+                      text = "Warning: URL should end with a slash (/)",
+                      color = Color(0xFFF59E0B),
+                      modifier = Modifier.padding(top = 6.dp)
+                    )
+                  }
+
+                  Spacer(modifier = Modifier.height(10.dp))
+                  Text("API Version", color = colors.textSecondary, style = typography.body)
+                  TextField(
+                    state = apiVersionState,
+                    modifier = Modifier.padding(top = 6.dp).fillMaxWidth(),
+                    placeholder = { Text("Enter API version") }
+                  )
+                }
               }
             }
           }
-        }
 
-        // Cancel button
-        Row(
-          modifier = Modifier.padding(8.dp),
-          horizontalArrangement = Arrangement.End
-        ) {
-          OutlinedButton(
-            onClick = onCloseRequest,
-            modifier = Modifier.padding(8.dp)
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(top = 12.dp),
+            horizontalArrangement = Arrangement.End
           ) {
-            Text("Cancel")
+            OutlinedButton(
+              onClick = onCloseRequest,
+              modifier = Modifier.padding(end = 8.dp)
+            ) {
+              Text("Cancel")
+            }
+            DefaultButton(
+              onClick = { if (canSubmit) saveProvider() },
+              enabled = canSubmit
+            ) {
+              Text(if (isEditMode) "Update Provider" else "Add Provider")
+            }
           }
         }
       }

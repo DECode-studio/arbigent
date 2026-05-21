@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.input.TextFieldState
@@ -43,6 +44,7 @@ import org.jetbrains.jewel.ui.component.OutlinedButton
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ProjectSettingsDialog(appStateHolder: ArbigentAppStateHolder, onCloseRequest: () -> Unit) {
+  val colors = LocalPremiumColors.current
   TestCompatibleDialog(
     onCloseRequest = onCloseRequest,
     title = "Project Settings",
@@ -70,234 +72,234 @@ fun ProjectSettingsDialog(appStateHolder: ArbigentAppStateHolder, onCloseRequest
               }
             }
           }
-          GroupHeader("Version")
-          Text(
-            text = BuildConfig.VERSION_NAME,
-            modifier = Modifier.padding(8.dp)
-          )
-          GroupHeader("Additional System Prompt")
-          TextArea(
-            state = additionalSystemPrompt,
-            modifier = Modifier
-              .padding(8.dp)
-              .height(60.dp)
-              .testTag("additional_system_prompt"),
-            placeholder = { Text("Additional System Prompt") },
-            decorationBoxModifier = Modifier.padding(horizontal = 8.dp),
-          )
+          SettingsCard(title = "General") {
+            GroupHeader("Version")
+            Text(
+              text = BuildConfig.VERSION_NAME,
+              modifier = Modifier.padding(8.dp)
+            )
+            GroupHeader("Additional System Prompt")
+            TextArea(
+              state = additionalSystemPrompt,
+              modifier = Modifier
+                .padding(8.dp)
+                .height(80.dp)
+                .testTag("additional_system_prompt"),
+              placeholder = { Text("Additional System Prompt") },
+              decorationBoxModifier = Modifier.padding(horizontal = 8.dp),
+            )
+          }
+          Spacer(modifier = Modifier.height(10.dp))
 
-          GroupHeader("Default Device Form Factor")
-          val defaultDeviceFormFactor by appStateHolder.defaultDeviceFormFactorFlow.collectAsState()
-
-          val selectedOption by remember {
-            derivedStateOf {
+          SettingsCard(title = "Default Device Form Factor") {
+            val defaultDeviceFormFactor by appStateHolder.defaultDeviceFormFactorFlow.collectAsState()
+            val selectedOption = remember(defaultDeviceFormFactor) {
               when {
                 defaultDeviceFormFactor.isMobile() -> "Mobile"
                 defaultDeviceFormFactor.isTv() -> "TV"
                 else -> "Unspecified"
               }
             }
-          }
-
-          Column(
-            modifier = Modifier.padding(8.dp)
-          ) {
-            Row(
-              verticalAlignment = Alignment.CenterVertically
-            ) {
-              RadioButtonRow(
-                text = "Mobile",
-                selected = selectedOption == "Mobile",
-                onClick = {
-                  appStateHolder.onDefaultDeviceFormFactorChanged(ArbigentScenarioDeviceFormFactor.Mobile)
-                }
-              )
-            }
-            Row(
-              verticalAlignment = Alignment.CenterVertically
-            ) {
-              RadioButtonRow(
-                text = "TV",
-                selected = selectedOption == "TV",
-                onClick = {
-                  appStateHolder.onDefaultDeviceFormFactorChanged(ArbigentScenarioDeviceFormFactor.Tv)
-                }
-              )
-            }
-            Row(
-              verticalAlignment = Alignment.CenterVertically
-            ) {
-              RadioButtonRow(
-                text = "Unspecified",
-                selected = selectedOption == "Unspecified",
-                onClick = {
-                  appStateHolder.onDefaultDeviceFormFactorChanged(ArbigentScenarioDeviceFormFactor.Unspecified)
-                }
-              )
-            }
-          }
-
-          GroupHeader("AI Options")
-          val aiOptions by appStateHolder.aiOptionsFlow.collectAsState()
-          val currentOptions = aiOptions ?: ArbigentAiOptions()
-          AiOptionsComponent(
-            currentOptions = currentOptions,
-            onOptionsChanged = appStateHolder::onAiOptionsChanged
-          )
-          GroupHeader {
-            Text("User Prompt Template")
-            IconActionButton(
-              key = AllIconsKeys.General.Information,
-              onClick = {},
-              contentDescription = "Prompt Template Info",
-              hint = Size(16),
-            ) {
-              Text(
-                text = "Available placeholders:\n" +
-                  "{{USER_INPUT_GOAL}} - The goal of the scenario\n" +
-                  "{{CURRENT_STEP}} - Current step number\n" +
-                  "{{MAX_STEP}} - Maximum steps allowed\n" +
-                  "{{STEPS}} - Steps completed so far"
-              )
-            }
-          }
-          var isValidTemplate by remember { mutableStateOf(true) }
-          val userPromptTemplate: TextFieldState = remember {
-            TextFieldState(
-              appStateHolder.promptFlow.value.userPromptTemplate
-            )
-          }
-          LaunchedEffect(Unit) {
-            snapshotFlow { userPromptTemplate.text }.collect { text ->
-              if (text.isNotBlank()) {
-                isValidTemplate = try {
-                  UserPromptTemplate(text.toString())
-                  appStateHolder.onPromptChanged(
-                    appStateHolder.promptFlow.value.copy(userPromptTemplate = text.toString())
-                  )
-                  true
-                } catch (e: IllegalArgumentException) {
-                  false
-                }
+            Column(modifier = Modifier.padding(8.dp)) {
+              Row(verticalAlignment = Alignment.CenterVertically) {
+                RadioButtonRow(
+                  text = "Mobile",
+                  selected = selectedOption == "Mobile",
+                  onClick = {
+                    appStateHolder.onDefaultDeviceFormFactorChanged(ArbigentScenarioDeviceFormFactor.Mobile)
+                  }
+                )
+              }
+              Row(verticalAlignment = Alignment.CenterVertically) {
+                RadioButtonRow(
+                  text = "TV",
+                  selected = selectedOption == "TV",
+                  onClick = {
+                    appStateHolder.onDefaultDeviceFormFactorChanged(ArbigentScenarioDeviceFormFactor.Tv)
+                  }
+                )
+              }
+              Row(verticalAlignment = Alignment.CenterVertically) {
+                RadioButtonRow(
+                  text = "Unspecified",
+                  selected = selectedOption == "Unspecified",
+                  onClick = {
+                    appStateHolder.onDefaultDeviceFormFactorChanged(ArbigentScenarioDeviceFormFactor.Unspecified)
+                  }
+                )
               }
             }
           }
-          TextArea(
-            state = userPromptTemplate,
-            modifier = Modifier
-              .padding(8.dp)
-              .height(120.dp)
-              .testTag("user_prompt_template"),
-            placeholder = { Text("User Prompt Template") },
-            decorationBoxModifier = Modifier.padding(horizontal = 8.dp),
-          )
-          if (!isValidTemplate) {
-            Text(
-              text = "Template must contain all required placeholders: {{USER_INPUT_GOAL}}, {{CURRENT_STEP}}, {{MAX_STEP}}, {{STEPS}}",
-              color = Color.Red,
-              modifier = Modifier.padding(4.dp)
+          Spacer(modifier = Modifier.height(10.dp))
+
+          SettingsCard(title = "AI Options") {
+            val aiOptions by appStateHolder.aiOptionsFlow.collectAsState()
+            val currentOptions = aiOptions ?: ArbigentAiOptions()
+            AiOptionsComponent(
+              currentOptions = currentOptions,
+              onOptionsChanged = appStateHolder::onAiOptionsChanged
             )
           }
-          GroupHeader("AI decision cache")
-          val cacheStrategy by appStateHolder.cacheStrategyFlow.collectAsState()
+          Spacer(modifier = Modifier.height(10.dp))
 
-          val selectedCacheStrategy by remember {
-            derivedStateOf {
+          SettingsCard(title = "User Prompt Template") {
+            GroupHeader {
+              Text("Template")
+              IconActionButton(
+                key = AllIconsKeys.General.Information,
+                onClick = {},
+                contentDescription = "Prompt Template Info",
+                hint = Size(16),
+              ) {
+                Text(
+                  text = "Available placeholders:\n" +
+                    "{{USER_INPUT_GOAL}} - The goal of the scenario\n" +
+                    "{{CURRENT_STEP}} - Current step number\n" +
+                    "{{MAX_STEP}} - Maximum steps allowed\n" +
+                    "{{STEPS}} - Steps completed so far"
+                )
+              }
+            }
+            var isValidTemplate by remember { mutableStateOf(true) }
+            val userPromptTemplate: TextFieldState = remember {
+              TextFieldState(
+                appStateHolder.promptFlow.value.userPromptTemplate
+              )
+            }
+            LaunchedEffect(Unit) {
+              snapshotFlow { userPromptTemplate.text }.collect { text ->
+                if (text.isNotBlank()) {
+                  isValidTemplate = try {
+                    UserPromptTemplate(text.toString())
+                    appStateHolder.onPromptChanged(
+                      appStateHolder.promptFlow.value.copy(userPromptTemplate = text.toString())
+                    )
+                    true
+                  } catch (e: IllegalArgumentException) {
+                    false
+                  }
+                }
+              }
+            }
+            TextArea(
+              state = userPromptTemplate,
+              modifier = Modifier
+                .padding(8.dp)
+                .height(140.dp)
+                .testTag("user_prompt_template"),
+              placeholder = { Text("User Prompt Template") },
+              decorationBoxModifier = Modifier.padding(horizontal = 8.dp),
+            )
+            if (!isValidTemplate) {
+              Text(
+                text = "Template must contain all required placeholders: {{USER_INPUT_GOAL}}, {{CURRENT_STEP}}, {{MAX_STEP}}, {{STEPS}}",
+                color = Color.Red,
+                modifier = Modifier.padding(4.dp)
+              )
+            }
+          }
+          Spacer(modifier = Modifier.height(10.dp))
+
+          SettingsCard(title = "AI Decision Cache") {
+            val cacheStrategy by appStateHolder.cacheStrategyFlow.collectAsState()
+            val selectedCacheStrategy = remember(cacheStrategy) {
               when (cacheStrategy.aiDecisionCacheStrategy) {
                 is AiDecisionCacheStrategy.Disabled -> "Disabled"
                 is AiDecisionCacheStrategy.InMemory -> "InMemory"
                 is AiDecisionCacheStrategy.Disk -> "Disk"
               }
             }
-          }
-
-          Column(modifier = Modifier.padding(8.dp)) {
-            RadioButtonRow(
-              text = "Disabled",
-              selected = selectedCacheStrategy == "Disabled",
-              onClick = {
-                appStateHolder.onCacheStrategyChanged(
-                  appStateHolder.cacheStrategyFlow.value.copy(
-                    aiDecisionCacheStrategy = AiDecisionCacheStrategy.Disabled
+            Column(modifier = Modifier.padding(8.dp)) {
+              RadioButtonRow(
+                text = "Disabled",
+                selected = selectedCacheStrategy == "Disabled",
+                onClick = {
+                  appStateHolder.onCacheStrategyChanged(
+                    appStateHolder.cacheStrategyFlow.value.copy(
+                      aiDecisionCacheStrategy = AiDecisionCacheStrategy.Disabled
+                    )
                   )
-                )
-              }
-            )
-            RadioButtonRow(
-              text = "InMemory",
-              selected = selectedCacheStrategy == "InMemory",
-              onClick = {
-                appStateHolder.onCacheStrategyChanged(
-                  appStateHolder.cacheStrategyFlow.value.copy(
-                    aiDecisionCacheStrategy = AiDecisionCacheStrategy.InMemory()
+                }
+              )
+              RadioButtonRow(
+                text = "InMemory",
+                selected = selectedCacheStrategy == "InMemory",
+                onClick = {
+                  appStateHolder.onCacheStrategyChanged(
+                    appStateHolder.cacheStrategyFlow.value.copy(
+                      aiDecisionCacheStrategy = AiDecisionCacheStrategy.InMemory()
+                    )
                   )
-                )
-              }
-            )
-            RadioButtonRow(
-              text = "Disk",
-              selected = selectedCacheStrategy == "Disk",
-              onClick = {
-                appStateHolder.onCacheStrategyChanged(
-                  appStateHolder.cacheStrategyFlow.value.copy(
-                    aiDecisionCacheStrategy = AiDecisionCacheStrategy.Disk()
+                }
+              )
+              RadioButtonRow(
+                text = "Disk",
+                selected = selectedCacheStrategy == "Disk",
+                onClick = {
+                  appStateHolder.onCacheStrategyChanged(
+                    appStateHolder.cacheStrategyFlow.value.copy(
+                      aiDecisionCacheStrategy = AiDecisionCacheStrategy.Disk()
+                    )
                   )
-                )
-              }
-            )
-          }
-
-          GroupHeader("MCP JSON Configuration")
-          val mcpJson: TextFieldState = remember {
-            TextFieldState(
-              appStateHolder.mcpJsonFlow.value
-            )
-          }
-          LaunchedEffect(Unit) {
-            snapshotFlow { mcpJson.text }.collect { text ->
-              if (text.isNotBlank()) {
-                appStateHolder.onMcpJsonChanged(text.toString())
-              }
+                }
+              )
             }
           }
-          TextArea(
-            state = mcpJson,
-            modifier = Modifier
-              .padding(8.dp)
-              .height(200.dp)
-              .testTag("mcp_json"),
-            placeholder = { Text("MCP JSON Configuration") },
-            decorationBoxModifier = Modifier.padding(horizontal = 8.dp),
-          )
+          Spacer(modifier = Modifier.height(10.dp))
 
-          GroupHeader("Additional Actions")
-          val additionalActions by appStateHolder.additionalActionsFlow.collectAsState()
-          val currentActions = additionalActions ?: emptyList()
+          SettingsCard(title = "MCP JSON Configuration") {
+            val mcpJson: TextFieldState = remember {
+              TextFieldState(
+                appStateHolder.mcpJsonFlow.value
+              )
+            }
+            LaunchedEffect(Unit) {
+              snapshotFlow { mcpJson.text }.collect { text ->
+                if (text.isNotBlank()) {
+                  appStateHolder.onMcpJsonChanged(text.toString())
+                }
+              }
+            }
+            TextArea(
+              state = mcpJson,
+              modifier = Modifier
+                .padding(8.dp)
+                .height(220.dp)
+                .testTag("mcp_json"),
+              placeholder = { Text("MCP JSON Configuration") },
+              decorationBoxModifier = Modifier.padding(horizontal = 8.dp),
+            )
+          }
+          Spacer(modifier = Modifier.height(10.dp))
 
-          Column(modifier = Modifier.padding(8.dp)) {
-            AdditionalActionsConstants.AVAILABLE_ACTIONS.forEach { actionName ->
-              Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(vertical = 2.dp)
-              ) {
-                Checkbox(
-                  checked = currentActions.contains(actionName),
-                  onCheckedChange = { isChecked ->
-                    val updatedActions = if (isChecked) {
-                      currentActions + actionName
-                    } else {
-                      currentActions - actionName
-                    }
-                    appStateHolder.onAdditionalActionsChanged(
-                      if (updatedActions.isEmpty()) null else updatedActions
-                    )
-                  },
-                  modifier = Modifier.testTag("additional_action_$actionName")
-                )
-                Text(
-                  text = actionName,
-                  modifier = Modifier.padding(start = 8.dp)
-                )
+          SettingsCard(title = "Additional Actions") {
+            val additionalActions by appStateHolder.additionalActionsFlow.collectAsState()
+            val currentActions = additionalActions ?: emptyList()
+            Column(modifier = Modifier.padding(8.dp)) {
+              AdditionalActionsConstants.AVAILABLE_ACTIONS.forEach { actionName ->
+                Row(
+                  verticalAlignment = Alignment.CenterVertically,
+                  modifier = Modifier.padding(vertical = 2.dp)
+                ) {
+                  Checkbox(
+                    checked = currentActions.contains(actionName),
+                    onCheckedChange = { isChecked ->
+                      val updatedActions = if (isChecked) {
+                        currentActions + actionName
+                      } else {
+                        currentActions - actionName
+                      }
+                      appStateHolder.onAdditionalActionsChanged(
+                        if (updatedActions.isEmpty()) null else updatedActions
+                      )
+                    },
+                    modifier = Modifier.testTag("additional_action_$actionName")
+                  )
+                  Text(
+                    text = actionName,
+                    modifier = Modifier.padding(start = 8.dp)
+                  )
+                }
               }
             }
           }
@@ -305,7 +307,7 @@ fun ProjectSettingsDialog(appStateHolder: ArbigentAppStateHolder, onCloseRequest
         // Close Button
         OutlinedButton(
           onClick = onCloseRequest,
-          modifier = Modifier.padding(8.dp)
+          modifier = Modifier.padding(8.dp).align(Alignment.End)
         ) {
           Text("Close")
         }
@@ -324,10 +326,11 @@ fun TestCompatibleDialog(
   content: @Composable () -> Unit
 ) {
   val isUiTest = LocalIsUiTest.current
+  val colors = LocalPremiumColors.current
   if (isUiTest) {
     Box(
       Modifier.padding(16.dp)
-        .background(color = Color.White)
+        .background(color = colors.background)
         .fillMaxSize()
     ) {
       content()

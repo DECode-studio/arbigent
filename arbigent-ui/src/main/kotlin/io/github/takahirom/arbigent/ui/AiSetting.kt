@@ -93,6 +93,30 @@ sealed interface AiProviderSetting {
     }
   }
 
+  @Serializable
+  @SerialName("NvidiaNim")
+  data class NvidiaNim(
+    override val id: String,
+    override val apiKey: String,
+    override val modelName: String,
+    override val baseUrl: String = "https://integrate.api.nvidia.com/v1/",
+  ) : AiProviderSetting, OpenAiBasedApiProviderSetting {
+    override val name: String
+      get() = "NVIDIA NIM"
+
+    override fun updatedApiKey(apiKey: String): NormalAiProviderSetting {
+      return copy(apiKey = apiKey)
+    }
+
+    override fun updatedModelName(modelName: String): NormalAiProviderSetting {
+      return copy(modelName = modelName)
+    }
+
+    fun updatedBaseUrl(baseUrl: String): NvidiaNim {
+      return copy(baseUrl = baseUrl)
+    }
+  }
+
   // https://learn.microsoft.com/en-us/azure/ai-services/openai/reference#chat-completions
   @Serializable
   @SerialName("AzureOpenAi")

@@ -29,8 +29,9 @@ import org.jetbrains.jewel.ui.theme.simpleListItemStyle
 fun App(
   appStateHolder: ArbigentAppStateHolder
 ) {
+  val colors = LocalPremiumColors.current
   Column(
-    Modifier.fillMaxSize().background(JewelTheme.globalColors.panelBackground)
+    Modifier.fillMaxSize().background(colors.background)
   ) {
     val deviceConnectionState by appStateHolder.deviceConnectionState.collectAsState()
     if (deviceConnectionState is DeviceConnectionState.NotConnected) {
@@ -206,6 +207,13 @@ private fun MainScreen(
 @Composable
 fun ProjectFileControls(appStateHolder: ArbigentAppStateHolder) {
   FlowRow {
+    OutlinedButton(
+      onClick = {
+        appStateHolder.backToLauncher()
+      }
+    ) {
+      Text("Back to setup")
+    }
     IconActionButton(
       key = AllIconsKeys.Actions.MenuSaveall,
       onClick = {

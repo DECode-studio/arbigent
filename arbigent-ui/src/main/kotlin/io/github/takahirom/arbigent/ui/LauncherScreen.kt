@@ -1,6 +1,11 @@
 package io.github.takahirom.arbigent.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.rememberTextFieldState
@@ -10,8 +15,10 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.takahirom.arbigent.ArbigentDeviceOs
@@ -25,112 +32,251 @@ fun LauncherScreen(
   appStateHolder: ArbigentAppStateHolder,
   modifier: Modifier = Modifier
 ) {
+  val colors = LocalPremiumColors.current
+  val typography = LocalPremiumTypography.current
   val devicesStateHolder = appStateHolder.devicesStateHolder
   val aiSettingStateHolder = remember { AiSettingStateHolder() }
   val aiSetting = aiSettingStateHolder.aiSetting
-  Column(
-    modifier
-      .width(400.dp)
-      .verticalScroll(rememberScrollState())
-      .padding(8.dp),
-    verticalArrangement = Arrangement.Center
+  val deviceOs by devicesStateHolder.selectedDeviceOs.collectAsState()
+  val devices by devicesStateHolder.devices.collectAsState()
+  val selectedDevice by devicesStateHolder.selectedDevice.collectAsState()
+  val connectedCount = if (selectedDevice != null) 1 else 0
+  val selectedProvider = aiSetting.aiSettings.firstOrNull { it.id == aiSetting.selectedId }
+  val hasDevice = selectedDevice != null || devices.isNotEmpty()
+  val hasAiProvider = aiSetting.selectedId != null
+
+  Box(
+    modifier = modifier
+      .fillMaxSize()
+      .background(colors.background)
+      .padding(horizontal = 20.dp, vertical = 14.dp)
   ) {
-    GroupHeader("Device Type")
-    Row(
-      Modifier.padding(8.dp)
+    Column(
+      modifier = Modifier
+        .fillMaxWidth()
+        .widthIn(max = 1080.dp)
+        .align(Alignment.TopCenter)
+        .verticalScroll(rememberScrollState()),
+      verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-      val deviceOs by devicesStateHolder.selectedDeviceOs.collectAsState()
-      RadioButtonRow(
-        text = "Android",
-        selected = deviceOs.isAndroid(),
-        onClick = { devicesStateHolder.selectedDeviceOs.value = ArbigentDeviceOs.Android }
+      DashboardHero(
+        deviceOsLabel = deviceOs.name,
+        selectedDeviceName = selectedDevice?.name,
+        selectedProviderName = selectedProvider?.name,
+        connectedCount = connectedCount,
+        totalDevices = devices.size
       )
-      RadioButtonRow(
-        text = "iOS",
-        selected = deviceOs.isIos(),
-        onClick = { devicesStateHolder.selectedDeviceOs.value = ArbigentDeviceOs.Ios }
-      )
-      RadioButtonRow(
-        text = "Web(Experimental)",
-        selected = deviceOs.isWeb(),
-        onClick = { devicesStateHolder.selectedDeviceOs.value = ArbigentDeviceOs.Web }
-      )
-    }
-    val devices by devicesStateHolder.devices.collectAsState()
-    Column(Modifier) {
-      Row {
-        GroupHeader(modifier = Modifier.weight(1F).align(Alignment.CenterVertically)) {
-          Text("Devices")
-          IconButton(
-            modifier = Modifier.align(Alignment.CenterVertically),
-            onClick = {
-              devicesStateHolder.fetchDevices()
-            }) {
-            Icon(
-              key = AllIconsKeys.Actions.Refresh,
-              contentDescription = "Refresh",
-              hint = Size(16)
-            )
+
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.Top
+      ) {
+        Column(
+          modifier = Modifier.weight(1f),
+          verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+          SettingsCard(title = "Device Type") {
+            Row(
+              modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(top = 2.dp),
+              horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+              RadioButtonRow(
+                text = "Android",
+                selected = deviceOs.isAndroid(),
+                onClick = { devicesStateHolder.selectedDeviceOs.value = ArbigentDeviceOs.Android }
+              )
+              RadioButtonRow(
+                text = "iOS",
+                selected = deviceOs.isIos(),
+                onClick = { devicesStateHolder.selectedDeviceOs.value = ArbigentDeviceOs.Ios }
+              )
+              RadioButtonRow(
+                text = "Web(Experimental)",
+                selected = deviceOs.isWeb(),
+                onClick = { devicesStateHolder.selectedDeviceOs.value = ArbigentDeviceOs.Web }
+              )
+            }
+          }
+
+          SettingsCard(title = "Devices") {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              Text(
+                text = "Available devices",
+                style = typography.body,
+                color = colors.textSecondary,
+                modifier = Modifier.weight(1f)
+              )
+              IconButton(
+                onClick = { devicesStateHolder.fetchDevices() }
+              ) {
+                Icon(
+                  key = AllIconsKeys.Actions.Refresh,
+                  contentDescription = "Refresh",
+                  hint = Size(16)
+                )
+              }
+            }
+            if (devices.isEmpty()) {
+              Text(
+                modifier = Modifier.padding(8.dp),
+                text = "No devices found",
+                color = colors.textSecondary
+              )
+            } else {
+              devices.forEachIndexed { index, device ->
+                val isActive = device == selectedDevice || (selectedDevice == null && index == 0)
+                Row(
+                  modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(if (isActive) colors.successBg else colors.background)
+                    .border(1.dp, if (isActive) colors.success else colors.border, RoundedCornerShape(10.dp))
+                    .clickable { devicesStateHolder.onSelectedDeviceChanged(device) }
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                  verticalAlignment = Alignment.CenterVertically
+                ) {
+                  RadioButtonRow(
+                    text = device.name,
+                    selected = isActive,
+                    onClick = { devicesStateHolder.onSelectedDeviceChanged(device) },
+                    modifier = Modifier.weight(1f)
+                  )
+                  if (isActive) {
+                    Text(
+                      text = "ACTIVE",
+                      style = typography.body.copy(fontWeight = FontWeight.Bold),
+                      color = colors.success
+                    )
+                  }
+                }
+              }
+            }
           }
         }
 
-      }
-      if (devices.isEmpty()) {
-        Text(
-          modifier = Modifier.padding(8.dp),
-          text = "No devices found"
-        )
-      } else {
-        devices.forEachIndexed { index, device ->
-          val selectedDevice by devicesStateHolder.selectedDevice.collectAsState()
-          RadioButtonRow(
-            modifier = Modifier.padding(8.dp),
-            text = device.name,
-            selected = device == selectedDevice || (selectedDevice == null && index == 0),
-            onClick = {
-              devicesStateHolder.onSelectedDeviceChanged(device)
-            }
+        Column(
+          modifier = Modifier.weight(1f),
+          verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+          AiProviderSetting(
+            modifier = Modifier.fillMaxWidth(),
+            aiSettingStateHolder = aiSettingStateHolder,
+          )
+          AppSettingsSection(
+            modifier = Modifier.fillMaxWidth(),
+            appSettingsStateHolder = appStateHolder.appSettingsStateHolder,
+          )
+          MCPSettingsSection(
+            modifier = Modifier.fillMaxWidth(),
+            appStateHolder = appStateHolder,
           )
         }
       }
+
+      SettingsCard(title = "Ready to connect") {
+        if (!hasDevice) {
+          Text(
+            text = "Error: No devices found. Please connect to a device.",
+            color = colors.error,
+            modifier = Modifier.padding(vertical = 4.dp)
+          )
+        }
+        if (!hasAiProvider) {
+          Text(
+            text = "Error: No AI provider selected. Please select an AI provider.",
+            color = colors.error,
+            modifier = Modifier.padding(vertical = 4.dp)
+          )
+        }
+        DefaultButton(
+          modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+          onClick = {
+            appStateHolder.onClickConnect(devicesStateHolder)
+          },
+          enabled = hasAiProvider && hasDevice
+        ) {
+          Text("Connect to device")
+        }
+      }
     }
-    AiProviderSetting(
-      modifier = Modifier.padding(8.dp),
-      aiSettingStateHolder = aiSettingStateHolder,
+  }
+}
+
+@Composable
+private fun DashboardHero(
+  deviceOsLabel: String,
+  selectedDeviceName: String?,
+  selectedProviderName: String?,
+  connectedCount: Int,
+  totalDevices: Int
+) {
+  val colors = LocalPremiumColors.current
+  val typography = LocalPremiumTypography.current
+  SettingsCard(title = "Launch Dashboard") {
+    Text(
+      text = "Configure your device and AI provider, then connect in one click.",
+      color = colors.textSecondary,
+      style = typography.body
     )
-    AppSettingsSection(
-      modifier = Modifier.padding(8.dp),
-      appSettingsStateHolder = appStateHolder.appSettingsStateHolder,
-    )
-    MCPSettingsSection(
-      modifier = Modifier.padding(8.dp),
-      appStateHolder = appStateHolder,
-    )
-    val deviceIsSelected = devices.isNotEmpty()
-    if (!deviceIsSelected) {
-      Text(
-        text = "Error: No devices found. Please connect to a device.",
-        color = androidx.compose.ui.graphics.Color.Red,
-        modifier = Modifier.padding(8.dp).align(Alignment.CenterHorizontally)
-      )
-    }
-    val isAiProviderSelected = aiSetting.selectedId != null
-    if (!isAiProviderSelected) {
-      Text(
-        text = "Error: No AI provider selected. Please select an AI provider.",
-        color = androidx.compose.ui.graphics.Color.Red,
-        modifier = Modifier.padding(8.dp).align(Alignment.CenterHorizontally)
-      )
-    }
-    DefaultButton(
-      modifier = Modifier.align(Alignment.CenterHorizontally),
-      onClick = {
-        appStateHolder.onClickConnect(devicesStateHolder)
-      },
-      enabled = isAiProviderSelected && deviceIsSelected
+    Spacer(modifier = Modifier.height(10.dp))
+    Row(
+      modifier = Modifier.fillMaxWidth(),
+      horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-      Text("Connect to device")
+      DashboardStatPill(
+        modifier = Modifier.weight(1f),
+        label = "OS",
+        value = deviceOsLabel
+      )
+      DashboardStatPill(
+        modifier = Modifier.weight(1f),
+        label = "Device",
+        value = selectedDeviceName ?: "Not selected"
+      )
+      DashboardStatPill(
+        modifier = Modifier.weight(1f),
+        label = "AI",
+        value = selectedProviderName ?: "Not selected"
+      )
+      DashboardStatPill(
+        modifier = Modifier.weight(1f),
+        label = "Connected",
+        value = "$connectedCount / $totalDevices"
+      )
     }
+  }
+}
+
+@Composable
+private fun DashboardStatPill(
+  modifier: Modifier = Modifier,
+  label: String,
+  value: String
+) {
+  val colors = LocalPremiumColors.current
+  val typography = LocalPremiumTypography.current
+  Column(
+    modifier = modifier
+      .clip(RoundedCornerShape(10.dp))
+      .background(colors.background)
+      .border(1.dp, colors.border, RoundedCornerShape(10.dp))
+      .padding(horizontal = 10.dp, vertical = 8.dp)
+  ) {
+    Text(
+      text = label,
+      style = typography.body,
+      color = colors.textSecondary
+    )
+    Text(
+      text = value,
+      style = typography.header2.copy(fontWeight = FontWeight.SemiBold),
+      color = colors.textPrimary
+    )
   }
 }
 
@@ -184,11 +330,13 @@ private fun AiProviderSetting(
   aiSettingStateHolder: AiSettingStateHolder,
   modifier: Modifier
 ) {
-  Column {
-    GroupHeader("AI Provider")
+  SettingsCard(
+    title = "AI Provider",
+    modifier = modifier
+  ) {
     val aiSetting = aiSettingStateHolder.aiSetting
     Row(
-      modifier = Modifier.padding(8.dp),
+      modifier = Modifier.padding(bottom = 8.dp),
       verticalAlignment = Alignment.CenterVertically
     ) {
       Checkbox(
@@ -200,7 +348,7 @@ private fun AiProviderSetting(
       Text("Enable Debug Logging")
     }
     FlowRow(
-      modifier = modifier.fillMaxWidth(),
+      modifier = Modifier.fillMaxWidth(),
       horizontalArrangement = Arrangement.spacedBy(4.dp),
       verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {

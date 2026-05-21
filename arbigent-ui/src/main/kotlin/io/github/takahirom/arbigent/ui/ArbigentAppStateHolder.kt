@@ -474,6 +474,8 @@ class ArbigentAppStateHolder(
 
   fun cancel() {
     job?.cancel()
+    projectStateFlow.value?.cancel()
+    allScenarioStateHoldersStateFlow.value.forEach { it.cancel() }
   }
 
   fun close() {
@@ -504,6 +506,20 @@ class ArbigentAppStateHolder(
         deviceCache[selectedDevice] = device
       }
       deviceConnectionState.value = DeviceConnectionState.Connected(device)
+    }
+  }
+
+  fun backToLauncher() {
+    coroutineScope.launch {
+      cancel()
+      allScenarioStateHoldersStateFlow.value.forEach { it.cancel() }
+      val currentConnection = deviceConnectionState.value
+      if (currentConnection is DeviceConnectionState.Connected) {
+        ArbigentGlobalStatus.onDisconnect {
+          currentConnection.device.close()
+        }
+      }
+      deviceConnectionState.value = DeviceConnectionState.NotConnected
     }
   }
 
