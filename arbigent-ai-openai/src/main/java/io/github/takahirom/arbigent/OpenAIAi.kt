@@ -158,7 +158,7 @@ public class OpenAIAi @OptIn(ArbigentInternalApi::class) constructor(
     install(HttpTimeout) {
       requestTimeoutMillis =
         INFINITE_TIMEOUT_MS
-      socketTimeoutMillis = 80_000
+      socketTimeoutMillis = 300_000
     }
     if (loggingEnabled) {
       install(Logging) {
@@ -173,7 +173,7 @@ public class OpenAIAi @OptIn(ArbigentInternalApi::class) constructor(
   },
   private val openAiImageAssertionModel: OpenAiAiAssertionModel = OpenAiAiAssertionModel(
     apiKey = apiKey,
-    baseUrl = baseUrl,
+    baseUrl = normalizeApiBaseUrl(baseUrl),
     modelName = modelName,
     loggingEnabled = loggingEnabled,
     requestBuilderModifier = requestBuilderModifier,
@@ -224,8 +224,8 @@ public class OpenAIAi @OptIn(ArbigentInternalApi::class) constructor(
       )
     val imageDetail = decisionInput.aiOptions?.imageDetail?.name?.lowercase()
     arbigentDebugLog { "AI imageDetailOption: $imageDetail" }
-    val messages: List<ChatMessage> = listOf(
-      ChatMessage(
+    fun buildDecisionMessages(includeImage: Boolean): List<ChatMessage> {
+      val systemMessage = ChatMessage(
         role = "system",
         contents = when (formFactor) {
           ArbigentScenarioDeviceFormFactor.Tv -> decisionInput.prompt.systemPromptsForTv
@@ -241,26 +241,32 @@ public class OpenAIAi @OptIn(ArbigentInternalApi::class) constructor(
             text = it
           )
         }
-      ),
-      ChatMessage(
-        role = "user",
-        contents = listOf(
-          Content(
-            type = "image_url",
-            imageUrl = ImageUrl(
-              url = "data:${decisionInput.aiOptions?.imageFormat?.mimeType ?: ImageFormat.PNG.mimeType};base64,$imageBase64",
-              detail = imageDetail
-            )
-          ),
-          Content(
-            type = "text",
-            text = prompt
-          ),
+      )
+      val userContents = mutableListOf<Content>()
+      if (includeImage) {
+        userContents += Content(
+          type = "image_url",
+          imageUrl = ImageUrl(
+            url = "data:${decisionInput.aiOptions?.imageFormat?.mimeType ?: ImageFormat.PNG.mimeType};base64,$imageBase64",
+            detail = imageDetail
+          )
+        )
+      }
+      userContents += Content(
+        type = "text",
+        text = prompt
+      )
+      return listOf(
+        systemMessage,
+        ChatMessage(
+          role = "user",
+          contents = userContents
         )
       )
-    )
-    val toolDefinitions = buildTools(agentActionTypes = agentActionTypes, mcpTools = decisionInput.mcpTools)
-    val completionRequest = ChatCompletionRequest(
+    }
+    var messages: List<ChatMessage> = buildDecisionMessages(includeImage = true)
+    var toolDefinitions = buildTools(agentActionTypes = agentActionTypes, mcpTools = decisionInput.mcpTools)
+    var completionRequest = ChatCompletionRequest(
       model = modelName,
       messages = messages,
       tools = toolDefinitions,
@@ -280,16 +286,40 @@ public class OpenAIAi @OptIn(ArbigentInternalApi::class) constructor(
       retried++
       return decideAgentActions(decisionInput)
     } catch (e: Exception) {
-      contextHolder.addStep(
-        ArbigentContextHolder.Step(
-          stepId = decisionInput.stepId,
-          agentAction = FailedAgentAction(),
-          feedback = "Failed to execute the task by the exception: ${e.message}.",
-          cacheKey = decisionInput.cacheKey,
-          screenshotFilePath = decisionInput.screenshotFilePath,
+      if (isNonMultimodalModelError(e)) {
+        arbigentInfoLog("Model '$modelName' is not multimodal. Retrying decision request without image input.")
+        messages = buildDecisionMessages(includeImage = false)
+        completionRequest = completionRequest.copy(messages = messages)
+        chatCompletion(
+          requestUuid = requestUuid,
+          chatCompletionRequest = completionRequest,
+          aiOptions = decisionInput.aiOptions
         )
-      )
-      throw e
+      } else if (isUnsupportedXgrammarSchemaError(e)) {
+        arbigentInfoLog("Provider rejected strict JSON schema. Retrying with xgrammar-compatible tool schema.")
+        toolDefinitions = buildTools(
+          agentActionTypes = agentActionTypes,
+          mcpTools = decisionInput.mcpTools,
+          strictJsonSchema = false
+        )
+        completionRequest = completionRequest.copy(tools = toolDefinitions)
+        chatCompletion(
+          requestUuid = requestUuid,
+          chatCompletionRequest = completionRequest,
+          aiOptions = decisionInput.aiOptions
+        )
+      } else {
+        contextHolder.addStep(
+          ArbigentContextHolder.Step(
+            stepId = decisionInput.stepId,
+            agentAction = FailedAgentAction(),
+            feedback = "Failed to execute the task by the exception: ${e.message}.",
+            cacheKey = decisionInput.cacheKey,
+            screenshotFilePath = decisionInput.screenshotFilePath,
+          )
+        )
+        throw e
+      }
     }
     val curlString = curls.lastOrNull { it.requestUuid == requestUuid }?.command
       ?: "No curl command available for requestUuid: $requestUuid"
@@ -355,6 +385,17 @@ public class OpenAIAi @OptIn(ArbigentInternalApi::class) constructor(
       aiOptions = aiOptions,
       aiHints = aiHints,
     )
+  }
+
+  private fun isNonMultimodalModelError(e: Exception): Boolean {
+    val message = e.message?.lowercase() ?: return false
+    return message.contains("not a multimodal model") ||
+      (message.contains("multimodal") && message.contains("400"))
+  }
+
+  private fun isUnsupportedXgrammarSchemaError(e: Exception): Boolean {
+    val message = e.message?.lowercase() ?: return false
+    return message.contains("xgrammar") && message.contains("json schema")
   }
 
   private fun parseResponse(
@@ -559,8 +600,10 @@ public class OpenAIAi @OptIn(ArbigentInternalApi::class) constructor(
     aiOptions: ArbigentAiOptions? = null
   ): String {
     return runBlocking {
+      throttleChatCompletionRequestIfNeeded()
+      val endpoint = normalizeApiBaseUrl(baseUrl) + "chat/completions"
       val response: HttpResponse =
-        httpClient.post(baseUrl + "chat/completions") {
+        httpClient.post(endpoint) {
           url {
             parameters.append("requestUuid", requestUuid)
           }
@@ -575,7 +618,7 @@ public class OpenAIAi @OptIn(ArbigentInternalApi::class) constructor(
         throw ArbigentAiRateLimitExceededException()
       } else if (400 <= response.status.value) {
         throw IllegalStateException(
-          "Failed to call API: ${response.status} ${
+          "Failed to call API: ${response.status} [endpoint=$endpoint] ${
             response.bodyAsText(
               Charset.defaultCharset()
             )
@@ -584,6 +627,18 @@ public class OpenAIAi @OptIn(ArbigentInternalApi::class) constructor(
       }
       val responseBody = response.bodyAsText()
       return@runBlocking responseBody
+    }
+  }
+
+  private fun throttleChatCompletionRequestIfNeeded() {
+    synchronized(requestThrottleLock) {
+      val now = System.currentTimeMillis()
+      val elapsedMs = now - lastChatCompletionTimestampMs
+      val waitMs = MIN_CHAT_COMPLETION_INTERVAL_MS - elapsedMs
+      if (waitMs > 0L) {
+        Thread.sleep(waitMs)
+      }
+      lastChatCompletionTimestampMs = System.currentTimeMillis()
     }
   }
 
@@ -602,9 +657,11 @@ public class OpenAIAi @OptIn(ArbigentInternalApi::class) constructor(
    */
   internal fun buildRequestBody(request: ChatCompletionRequest, extraParams: JsonObject?): JsonElement {
     val json = Json { encodeDefaults = true; explicitNulls = false }
-    if (extraParams == null) return json.encodeToJsonElement(request)
+    val requestJson = json.encodeToJsonElement(request).jsonObject.toMutableMap().also {
+      it["messages"] = normalizeMessageContents(it["messages"] ?: JsonArray(emptyList()))
+    }
+    if (extraParams == null) return JsonObject(requestJson)
 
-    val requestJson = json.encodeToJsonElement(request).jsonObject.toMutableMap()
     extraParams.forEach { (key, value) ->
       if (key in protectedFields) {
         // Silently ignore protected field override attempt to prevent information disclosure
@@ -616,7 +673,37 @@ public class OpenAIAi @OptIn(ArbigentInternalApi::class) constructor(
     return JsonObject(requestJson)
   }
 
-  private fun buildTools(agentActionTypes: List<AgentActionType>, mcpTools: List<MCPTool>?): List<ToolDefinition> {
+  private fun normalizeMessageContents(messagesElement: JsonElement): JsonElement {
+    val messages = messagesElement as? JsonArray ?: return messagesElement
+    return JsonArray(
+      messages.map { message ->
+        val messageObject = message as? JsonObject ?: return@map message
+        val content = messageObject["content"] as? JsonArray ?: return@map message
+        if (content.isEmpty()) return@map message
+
+        val textParts = mutableListOf<String>()
+        val allText = content.all { item ->
+          val itemObject = item as? JsonObject ?: return@all false
+          if (itemObject["type"]?.jsonPrimitive?.contentOrNull != "text") return@all false
+          textParts += itemObject["text"]?.jsonPrimitive?.contentOrNull.orEmpty()
+          true
+        }
+        if (!allText) return@map message
+
+        JsonObject(
+          messageObject.toMutableMap().apply {
+            this["content"] = JsonPrimitive(textParts.joinToString("\n"))
+          }
+        )
+      }
+    )
+  }
+
+  private fun buildTools(
+    agentActionTypes: List<AgentActionType>,
+    mcpTools: List<MCPTool>?,
+    strictJsonSchema: Boolean = true,
+  ): List<ToolDefinition> {
     return agentActionTypes.map { actionType ->
       val jsonString = """
 {
@@ -624,7 +711,7 @@ public class OpenAIAi @OptIn(ArbigentInternalApi::class) constructor(
   "required": [${ArbigentAiAnswerItems.entries.joinToString(",") { it.key }}${
         if (actionType.arguments().isNotEmpty()) ", \"text\"" else ""
       }],
-"additionalProperties": false,
+${if (strictJsonSchema) "\"additionalProperties\": false," else ""}
 "properties": {${
         ArbigentAiAnswerItems.entries.joinToString(",\n") { entry ->
           entry.toJsonString()
@@ -646,7 +733,7 @@ public class OpenAIAi @OptIn(ArbigentInternalApi::class) constructor(
           name = "perform_${actionType.actionName.lowercase()}",
           description = actionType.actionDescription(),
           parameters = parameters.jsonObject,
-          strict = true
+          strict = strictJsonSchema
         )
       )
     } + mcpTools.orEmpty().map { tool ->
@@ -655,7 +742,9 @@ public class OpenAIAi @OptIn(ArbigentInternalApi::class) constructor(
 
       // Add the "type" field
       parametersMap["type"] = JsonPrimitive("object")
-      parametersMap["additionalProperties"] = JsonPrimitive(false)
+      if (strictJsonSchema) {
+        parametersMap["additionalProperties"] = JsonPrimitive(false)
+      }
 
       // Add the "properties" field with the original properties
       parametersMap["properties"] = (tool.inputSchema?.properties ?: JsonObject(emptyMap())).let {
@@ -685,7 +774,7 @@ public class OpenAIAi @OptIn(ArbigentInternalApi::class) constructor(
           name = "mcp_" + tool.name,
           description = tool.description,
           parameters = parameters,
-          strict = true
+          strict = strictJsonSchema
         )
       )
     }
@@ -929,6 +1018,9 @@ public class OpenAIAi @OptIn(ArbigentInternalApi::class) constructor(
      * These are critical API fields that could break functionality or cause security issues.
      */
     internal val protectedFields: Set<String> = setOf("model", "messages", "tools", "tool_choice")
+    private const val MIN_CHAT_COMPLETION_INTERVAL_MS: Long = 1_200L
+    private val requestThrottleLock = Any()
+    @Volatile private var lastChatCompletionTimestampMs: Long = 0L
   }
 }
 
@@ -950,4 +1042,10 @@ private fun File.getResizedIamgeBase64(scale: Float): String {
 //  ImageIO.write(bufferedImage, "png", output)
 //  return output.readBytes().encodeBase64()
   return this.readBytes().encodeBase64()
+}
+
+private fun normalizeApiBaseUrl(baseUrl: String): String {
+  val trimmed = baseUrl.trim().removeSuffix("/")
+  val withoutChatCompletions = trimmed.removeSuffix("/chat/completions")
+  return "$withoutChatCompletions/"
 }
