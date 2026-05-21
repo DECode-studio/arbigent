@@ -236,6 +236,7 @@ public class ArbigentScenarioExecutor {
       } while (!finishedSuccessfully && retryRemain-- > 0)
     } catch (e: CancellationException) {
       arbigentDebugLog("Arbigent.execute canceled")
+      throw e
     } catch (e: Exception) {
       errorHandler(e)
     } finally {

@@ -2,6 +2,7 @@ package io.github.takahirom.arbigent
 
 import io.github.takahirom.arbigent.result.ArbigentProjectExecutionResult
 import io.github.takahirom.arbigent.result.ArbigentScenarioDeviceFormFactor
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -70,7 +71,9 @@ public class ArbigentProject(
           val scenarioExecutor =
             scenarioAssignments().first { it.scenario.id == scenario.id }.scenarioExecutor
           scenarioExecutor.execute(scenario, mcpClient)
-          
+        } catch (e: CancellationException) {
+          arbigentInfoLog("Scenario execution canceled: ${scenario.id}")
+          throw e
         } catch (e: FailedToArchiveException) {
           arbigentErrorLog {
             "🔴 ${scenario.id} scenario failed to archive: ${e.stackTraceToString()}"
