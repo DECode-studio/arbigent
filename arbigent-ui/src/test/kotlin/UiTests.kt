@@ -685,9 +685,9 @@ class TestRobot(
     composeUiTest.onNode(hasContentDescription("Project Settings")).performClick()
     testScope.advanceUntilIdle()
 
-    // Scroll to AI decision cache section
+    // Scroll to AI Decision Cache section
     composeUiTest.onNode(hasTestTag("project_settings_content"))
-        .performScrollToNode(hasText("AI decision cache"))
+        .performScrollToNode(hasText("AI Decision Cache"))
     testScope.advanceUntilIdle()
 
     // Click InMemory radio button
@@ -714,7 +714,7 @@ class TestRobot(
     composeUiTest.onNode(hasContentDescription("Project Settings")).performClick()
     testScope.advanceUntilIdle()
     composeUiTest.onNode(hasTestTag("project_settings_content"))
-        .performScrollToNode(hasText("AI decision cache"))
+        .performScrollToNode(hasText("AI Decision Cache"))
     testScope.advanceUntilIdle()
     composeUiTest.onNode(hasText("InMemory"))
         .assertIsSelected()

@@ -1,7 +1,7 @@
 pluginManagement {
     repositories {
         maven("https://redirector.kotlinlang.org/maven/compose-dev")
-        google {
+        maven("https://maven.aliyun.com/repository/google") {
             content {
                 includeGroupByRegex("com\\.android.*")
                 includeGroupByRegex("com\\.google.*")
@@ -21,7 +21,7 @@ pluginManagement {
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.PREFER_PROJECT)
     repositories {
-        google()
+        maven("https://maven.aliyun.com/repository/google")
         mavenCentral()
         maven("https://www.jetbrains.com/intellij-repository/releases")
         maven("https://www.jetbrains.com/intellij-repository/snapshots")
