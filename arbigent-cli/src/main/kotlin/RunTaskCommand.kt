@@ -38,7 +38,8 @@ class ArbigentRunTaskCommand : CliktCommand(name = "task") {
     .groupChoice(
       "openai" to OpenAIAiConfig(),
       "gemini" to GeminiAiConfig(),
-      "azureopenai" to AzureOpenAiConfig()
+      "azureopenai" to AzureOpenAiConfig(),
+      "nvidia" to NvidiaAiConfig(),
     )
     .defaultByName("openai")
 

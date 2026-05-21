@@ -53,6 +53,11 @@ fun validateAiConfig(aiType: AiConfig) {
         throw CliktError("Missing Azure OpenAI API key. Please provide via --azure-openai-api-key, AZURE_OPENAI_API_KEY environment variable, or in .arbigent/settings.local.yml")
       }
     }
+    is NvidiaAiConfig -> {
+      if (aiType.nvidiaApiKey.isNullOrBlank()) {
+        throw CliktError("Missing NVIDIA API key. Please provide via --nvidia-api-key, NVIDIA_API_KEY environment variable, or in .arbigent/settings.local.yml")
+      }
+    }
   }
 }
 
@@ -107,6 +112,13 @@ fun createAi(aiType: AiConfig, aiApiLoggingEnabled: Boolean): ArbigentAi {
         parameter("api-version", aiType.azureOpenAIApiVersion)
         header("api-key", aiType.azureOpenAIKey!!)
       }
+    )
+
+    is NvidiaAiConfig -> OpenAIAi(
+      apiKey = aiType.nvidiaApiKey!!,
+      baseUrl = aiType.nvidiaEndpoint,
+      modelName = aiType.nvidiaModelName,
+      loggingEnabled = aiApiLoggingEnabled,
     )
   }
 }

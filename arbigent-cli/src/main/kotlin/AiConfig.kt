@@ -35,3 +35,12 @@ class AzureOpenAiConfig : AiConfig("Options for Azure OpenAI") {
     .default(OpenAIAi.DEFAULT_OPENAI_MODEL, OpenAIAi.DEFAULT_OPENAI_MODEL)
   val azureOpenAIKey by defaultOption("--azure-openai-api-key", "--azure-openai-key", envvar = "AZURE_OPENAI_API_KEY", help = "API key")
 }
+
+class NvidiaAiConfig : AiConfig("Options for NVIDIA NIM (OpenAI-compatible)") {
+  private val defaultEndpoint = "https://integrate.api.nvidia.com/v1/"
+  val nvidiaEndpoint by defaultOption("--nvidia-endpoint", help = "Endpoint URL (default: $defaultEndpoint)")
+    .default(defaultEndpoint, defaultForHelp = defaultEndpoint)
+  val nvidiaModelName by defaultOption("--nvidia-model-name", help = "Model name (default: google/gemma-3n-e4b-it)")
+    .default("google/gemma-3n-e4b-it", "google/gemma-3n-e4b-it")
+  val nvidiaApiKey by defaultOption("--nvidia-api-key", envvar = "NVIDIA_API_KEY", help = "API key")
+}
