@@ -1,6 +1,7 @@
 import com.github.takahirom.roborazzi.ExperimentalRoborazziApi
 import io.github.takahirom.arbigent.ChatCompletionRequest
 import io.github.takahirom.arbigent.ChatMessage
+import io.github.takahirom.arbigent.Content
 import io.github.takahirom.arbigent.OpenAIAi
 import kotlinx.serialization.json.*
 import org.junit.Assert.*
@@ -287,5 +288,51 @@ class BuildRequestBodyTest {
       "tools should be JsonNull or absent when null",
       tools == null || tools == JsonNull
     )
+  }
+
+  @Test
+  fun `buildRequestBody converts text-only content array to string`() {
+    val request = ChatCompletionRequest(
+      model = "gpt-4",
+      messages = listOf(
+        ChatMessage(
+          role = "system",
+          contents = listOf(
+            Content(type = "text", text = "rule one"),
+            Content(type = "text", text = "rule two"),
+          )
+        )
+      )
+    )
+
+    val result = openAiAi.buildRequestBody(request, null)
+    val content = result.jsonObject["messages"]!!
+      .jsonArray.first()
+      .jsonObject["content"]
+      ?.jsonPrimitive
+      ?.content
+    assertEquals("rule one\nrule two", content)
+  }
+
+  @Test
+  fun `buildRequestBody keeps mixed content as array`() {
+    val request = ChatCompletionRequest(
+      model = "gpt-4",
+      messages = listOf(
+        ChatMessage(
+          role = "user",
+          contents = listOf(
+            Content(type = "image_url"),
+            Content(type = "text", text = "describe image"),
+          )
+        )
+      )
+    )
+
+    val result = openAiAi.buildRequestBody(request, null)
+    val content = result.jsonObject["messages"]!!
+      .jsonArray.first()
+      .jsonObject["content"]
+    assertTrue(content is JsonArray)
   }
 }
